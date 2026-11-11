@@ -1,22 +1,23 @@
 import React from 'react';
-import ScheduleCard from './components/ScheduleCard';
-import { vanSchedules } from './mockData';
+import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
+import PassengerView from './components/PassengerView';
+import DispatcherView from './components/DispatcherView';
 import './App.css';
 
 function App() {
   return (
-    <div className="app-container">
-      <header className="app-header">
-        <h1>VanSked Terminal Board</h1>
-        <p>St. Bernard Terminal - Live Updates</p>
-      </header>
+    <BrowserRouter>
+      {/* Simple navigation to switch between views for testing */}
+      <nav style={{ textAlign: 'center', padding: '10px', backgroundColor: '#333' }}>
+        <Link to="/" style={{ color: 'white', marginRight: '20px' }}>Passenger View</Link>
+        <Link to="/dispatcher" style={{ color: 'white' }}>Dispatcher View</Link>
+      </nav>
 
-      <main className="schedule-list">
-        {vanSchedules.map((schedule) => (
-          <ScheduleCard key={schedule.id} schedule={schedule} />
-        ))}
-      </main>
-    </div>
+      <Routes>
+        <Route path="/" element={<PassengerView />} />
+        <Route path="/dispatcher" element={<DispatcherView />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
 
