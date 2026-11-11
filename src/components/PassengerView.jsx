@@ -1,8 +1,8 @@
 import React from 'react';
 import ScheduleCard from './ScheduleCard';
-import { vanSchedules } from '../mockData';
 
-const PassengerView = () => {
+// Notice we are now accepting "schedules" as a prop!
+const PassengerView = ({ schedules }) => {
   return (
     <div className="app-container">
       <header className="app-header">
@@ -10,7 +10,7 @@ const PassengerView = () => {
         <p>St. Bernard Terminal - Live Updates</p>
       </header>
       <main className="schedule-list">
-        {vanSchedules.map((schedule) => (
+        {schedules.map((schedule) => (
           <ScheduleCard key={schedule.id} schedule={schedule} />
         ))}
       </main>
