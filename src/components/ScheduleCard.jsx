@@ -1,22 +1,12 @@
 import React from 'react';
 
 const ScheduleCard = ({ schedule }) => {
-  // Determine color based on status
   const getStatusColor = (status) => {
     if (status === 'Boarding') return 'green';
     if (status === 'Full') return 'red';
     if (status === 'Departed') return 'gray';
-    return 'orange'; // Waiting
+    return 'orange';
   };
-
-  // Calculate how many seats are left
-  let seatsLeft = 0;
-  let totalSeats = 0;
-  
-  if (schedule.seats) {
-    seatsLeft = schedule.seats.filter(seat => seat === 'empty').length;
-    totalSeats = schedule.seats.length;
-  }
 
   return (
     <div style={styles.card}>
@@ -34,21 +24,14 @@ const ScheduleCard = ({ schedule }) => {
         <p><strong>Plate No:</strong> {schedule.plateNumber}</p>
         <p><strong>Fare:</strong> {schedule.fare}</p>
         
-        {/* Display Seats Available if the data exists */}
-        {schedule.seats && (
-          <div style={{ marginTop: '10px', padding: '8px', backgroundColor: '#f8f9fa', borderRadius: '4px' }}>
-            <p style={{ 
-              margin: 0, 
-              fontWeight: 'bold', 
-              color: seatsLeft === 0 ? 'red' : (seatsLeft <= 3 ? 'orange' : 'green') 
-            }}>
-              Seats Available: {seatsLeft} / {totalSeats}
+        {/* Show Vacancy Information if Departed */}
+        {schedule.status === 'Departed' && schedule.vacantSeats !== undefined && (
+          <div style={{ marginTop: '10px', padding: '8px', backgroundColor: schedule.vacantSeats > 0 ? '#d1ecf1' : '#f8d7da', borderRadius: '4px' }}>
+            <p style={{ margin: 0, fontWeight: 'bold', color: schedule.vacantSeats > 0 ? '#0c5460' : '#721c24' }}>
+              {schedule.vacantSeats > 0 
+                ? `Departed with ${schedule.vacantSeats} vacant seat(s). You can still flag it down along the highway.` 
+                : 'Departed Full.'}
             </p>
-            {seatsLeft === 0 && (
-              <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: 'red' }}>
-                This van is full. Waiting for next trip.
-              </p>
-            )}
           </div>
         )}
       </div>
@@ -56,7 +39,6 @@ const ScheduleCard = ({ schedule }) => {
   );
 };
 
-// Basic inline styles for tonight to make it look decent
 const styles = {
   card: {
     backgroundColor: 'white',

@@ -6,6 +6,7 @@ import PassengerView from './components/PassengerView';
 import DispatcherView from './components/DispatcherView';
 import './App.css';
 import QRCodeView from './components/QRCodeView';
+import TemplateManager from './components/TemplateManager';
 
 function App() {
   const [schedules, setSchedules] = useState([]);
@@ -36,12 +37,14 @@ function App() {
         <Link to="/" style={{ color: 'white', marginRight: '20px', textDecoration: 'none' }}>Passenger View</Link>
         <Link to="/dispatcher" style={{ color: 'white', textDecoration: 'none' }}>Dispatcher Console</Link>
         <Link to="/qr" style={{ color: 'white', textDecoration: 'none' }}>Terminal QR Code</Link>
+        <Link to="/templates" style={{ color: 'white', marginRight: '20px', textDecoration: 'none' }}>Manage Templates</Link>
       </nav>
 
       <Routes>
         {/* We only pass schedules now, no more updateScheduleStatus */}
         <Route path="/" element={<PassengerView schedules={schedules} />} />
         <Route path="/dispatcher" element={<DispatcherView schedules={schedules} />} />
+        <Route path="/templates" element={<TemplateManager />} />
         <Route path="/qr" element={<QRCodeView />} />
       </Routes>
     </BrowserRouter>

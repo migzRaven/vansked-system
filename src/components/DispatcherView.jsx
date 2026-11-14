@@ -1,124 +1,146 @@
 import React, { useState } from 'react';
-import { doc, updateDoc, addDoc, deleteDoc, collection } from 'firebase/firestore';
+import { doc, updateDoc, addDoc, deleteDoc, collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
-import SeatMap from './SeatMap';
 
-const DispatcherView = ({ schedules }) => {
-  const [newTrip, setNewTrip] = useState({
-    departureTime: '',
-    route: '',
-    driver: '',
-    plateNumber: '',
-    fare: '',
-    status: 'Waiting'
-  });
+const DispatcherTripCard = ({ schedule, handleDelete }) => {
+  const [isDeparting, setIsDeparting] = useState(false);
+  const [isFull, setIsFull] = useState(true);
+  const [vacantSeats, setVacantSeats] = useState(0);
 
-  // Logic when a dispatcher clicks a seat
-  const handleSeatClick = async (tripId, seatIndex, currentStatus, currentSeats) => {
-    // 1. Cycle the seat status: Empty -> Reserved -> Taken -> Empty
-    let nextStatus = 'empty';
-    if (currentStatus === 'empty') nextStatus = 'reserved';
-    else if (currentStatus === 'reserved') nextStatus = 'taken';
-    
-    // 2. Update the array
-    const updatedSeats = [...currentSeats];
-    updatedSeats[seatIndex] = nextStatus;
-
-    // 3. Check if the van is now full
-    const occupiedSeats = updatedSeats.filter(s => s === 'taken' || s === 'reserved').length;
-    let newVanStatus = 'Boarding';
-    
-    if (occupiedSeats === updatedSeats.length) {
-      newVanStatus = 'Full'; // Auto-trigger Full!
-    } else if (occupiedSeats === 0) {
-      newVanStatus = 'Waiting';
-    }
-
-    // 4. Save to Firebase
+  const confirmDeparture = async () => {
     try {
-      const tripRef = doc(db, "trips", tripId);
-      await updateDoc(tripRef, {
-        seats: updatedSeats,
-        status: newVanStatus
+      await updateDoc(doc(db, "trips", schedule.id), { 
+        status: 'Departed', 
+        vacantSeats: isFull ? 0 : parseInt(vacantSeats) || 0 
       });
+      setIsDeparting(false);
     } catch (error) {
-      console.error("Error updating seats: ", error);
+      console.error("Error departing: ", error);
     }
   };
 
-  const handleDelete = async (id) => {
-    if (window.confirm("Delete this trip?")) {
-      await deleteDoc(doc(db, "trips", id));
+  return (
+    <div style={{ border: '1px solid #ccc', padding: '15px', marginBottom: '15px', borderRadius: '8px', backgroundColor: '#fff' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+        <h3>{schedule.departureTime} - {schedule.route}</h3>
+        <button onClick={() => handleDelete(schedule.id)} style={{ color: 'red', border: 'none', background: 'transparent', cursor: 'pointer', fontWeight: 'bold' }}>Delete ✕</button>
+      </div>
+      
+      <p>Status: <strong style={{ color: schedule.status === 'Full' ? 'red' : (schedule.status === 'Departed' ? 'gray' : 'green') }}>{schedule.status}</strong></p>
+      {schedule.status === 'Departed' && (
+        <p style={{ fontSize: '14px', color: '#666' }}>Vacant Seats upon departure: {schedule.vacantSeats || 0}</p>
+      )}
+      
+      <div style={{ display: 'flex', gap: '10px', marginTop: '10px', flexWrap: 'wrap' }}>
+        {schedule.status !== 'Departed' && (
+          <>
+            <button onClick={() => setIsDeparting(!isDeparting)} style={{ padding: '8px 12px', cursor: 'pointer', backgroundColor: '#6c757d', color: 'white', border: 'none', borderRadius: '4px' }}>Mark Departed</button>
+            <button onClick={() => updateDoc(doc(db, "trips", schedule.id), { status: 'Full' })} style={{ padding: '8px 12px', cursor: 'pointer', backgroundColor: '#dc3545', color: 'white', border: 'none', borderRadius: '4px' }}>Mark Full</button>
+            <button onClick={() => updateDoc(doc(db, "trips", schedule.id), { status: 'Boarding' })} style={{ padding: '8px 12px', cursor: 'pointer', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '4px' }}>Mark Boarding</button>
+          </>
+        )}
+      </div>
+
+      {/* DEPARTURE DIALOG */}
+      {isDeparting && (
+        <div style={{ marginTop: '15px', padding: '15px', backgroundColor: '#fff3cd', borderRadius: '8px', border: '1px solid #ffeeba' }}>
+          <h4 style={{ margin: '0 0 10px 0' }}>Departure Details</h4>
+          <div style={{ display: 'flex', gap: '15px', marginBottom: '10px' }}>
+            <label><input type="radio" checked={isFull} onChange={() => setIsFull(true)} /> Full</label>
+            <label><input type="radio" checked={!isFull} onChange={() => setIsFull(false)} /> Has Vacant Seats</label>
+          </div>
+          {!isFull && <input type="number" min="1" placeholder="Number of vacant seats" value={vacantSeats} onChange={(e) => setVacantSeats(e.target.value)} style={{ padding: '8px', marginBottom: '10px', width: '100%' }} />}
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button onClick={confirmDeparture} style={{ padding: '8px 12px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '4px' }}>Confirm</button>
+            <button onClick={() => setIsDeparting(false)} style={{ padding: '8px 12px', backgroundColor: '#dc3545', color: 'white', border: 'none', borderRadius: '4px' }}>Cancel</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const DispatcherView = ({ schedules }) => {
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [newTrip, setNewTrip] = useState({
+    departureTime: '', route: '', driver: '', plateNumber: '', fare: '', status: 'Waiting'
+  });
+
+  const handleGenerateBoard = async () => {
+    if (!window.confirm("Generate today's trips from templates?")) return;
+    setIsGenerating(true);
+    
+    try {
+      const today = new Date().toLocaleDateString('en-US', { weekday: 'short' });
+      const querySnapshot = await getDocs(collection(db, "templates"));
+      
+      for (const templateDoc of querySnapshot.docs) {
+        const template = templateDoc.data();
+        if (template.days && template.days[today]) {
+          const exists = schedules.some(s => s.departureTime === template.departureTime && s.route === template.route);
+          
+          if (!exists) {
+            await addDoc(collection(db, "trips"), {
+              departureTime: template.departureTime,
+              route: template.route,
+              driver: template.driver,
+              plateNumber: template.plateNumber,
+              fare: template.fare,
+              status: 'Waiting'
+            });
+          }
+        }
+      }
+      alert("Board generated successfully!");
+    } catch (error) {
+      console.error("Error generating:", error);
     }
+    setIsGenerating(false);
+  };
+
+  const handleDelete = async (id) => {
+    if (window.confirm("Delete this trip?")) await deleteDoc(doc(db, "trips", id));
   };
 
   const handleAddTrip = async (e) => {
     e.preventDefault();
-    try {
-      // Create 15 empty seats by default
-      const initialSeats = Array(15).fill('empty');
-      await addDoc(collection(db, "trips"), { ...newTrip, seats: initialSeats });
-      setNewTrip({ departureTime: '', route: '', driver: '', plateNumber: '', fare: '', status: 'Waiting' });
-    } catch (error) {
-      console.error("Error adding document: ", error);
-    }
-  };
-
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setNewTrip({ ...newTrip, [name]: value });
+    await addDoc(collection(db, "trips"), newTrip);
+    setNewTrip({ departureTime: '', route: '', driver: '', plateNumber: '', fare: '', status: 'Waiting' });
+    setIsFormOpen(false);
   };
 
   return (
     <div className="app-container">
       <header className="app-header">
         <h1>Dispatcher Dashboard</h1>
-        <p>Manage Statuses & Seats</p>
       </header>
 
-      <div style={{ backgroundColor: '#e9ecef', padding: '15px', borderRadius: '8px', marginBottom: '20px' }}>
-        <h3>Add New Trip</h3>
-        <form onSubmit={handleAddTrip} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          <input type="text" name="departureTime" placeholder="Time (e.g., 4:00 PM)" value={newTrip.departureTime} onChange={handleInputChange} required style={{ padding: '8px' }} />
-          <input type="text" name="route" placeholder="Route" value={newTrip.route} onChange={handleInputChange} required style={{ padding: '8px' }} />
-          <input type="text" name="driver" placeholder="Driver Name" value={newTrip.driver} onChange={handleInputChange} required style={{ padding: '8px' }} />
-          <input type="text" name="plateNumber" placeholder="Plate Number" value={newTrip.plateNumber} onChange={handleInputChange} required style={{ padding: '8px' }} />
-          <input type="text" name="fare" placeholder="Fare" value={newTrip.fare} onChange={handleInputChange} required style={{ padding: '8px' }} />
-          <button type="submit" style={{ padding: '10px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Add Trip to Board</button>
-        </form>
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+        <button onClick={handleGenerateBoard} disabled={isGenerating} style={{ flex: 1, padding: '12px', backgroundColor: '#ffc107', color: 'black', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>
+          {isGenerating ? 'Generating...' : '⚡ Generate Today\'s Board'}
+        </button>
+        <button onClick={() => setIsFormOpen(!isFormOpen)} style={{ flex: 1, padding: '12px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>
+          {isFormOpen ? 'Cancel' : '+ Add Single Trip'}
+        </button>
       </div>
+
+      {isFormOpen && (
+        <div style={{ backgroundColor: '#e9ecef', padding: '15px', borderRadius: '8px', marginBottom: '20px' }}>
+          <form onSubmit={handleAddTrip} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <input type="text" placeholder="Time" value={newTrip.departureTime} onChange={e => setNewTrip({...newTrip, departureTime: e.target.value})} required style={{ padding: '8px' }} />
+            <input type="text" placeholder="Route" value={newTrip.route} onChange={e => setNewTrip({...newTrip, route: e.target.value})} required style={{ padding: '8px' }} />
+            <input type="text" placeholder="Driver" value={newTrip.driver} onChange={e => setNewTrip({...newTrip, driver: e.target.value})} required style={{ padding: '8px' }} />
+            <input type="text" placeholder="Plate No" value={newTrip.plateNumber} onChange={e => setNewTrip({...newTrip, plateNumber: e.target.value})} required style={{ padding: '8px' }} />
+            <input type="text" placeholder="Fare" value={newTrip.fare} onChange={e => setNewTrip({...newTrip, fare: e.target.value})} required style={{ padding: '8px' }} />
+            <button type="submit" style={{ padding: '10px', backgroundColor: '#0056b3', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Save Trip</button>
+          </form>
+        </div>
+      )}
       
       <main>
         {schedules.map((schedule) => (
-          <div key={schedule.id} style={{ border: '1px solid #ccc', padding: '15px', marginBottom: '15px', borderRadius: '8px', backgroundColor: '#fff' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <h3>{schedule.departureTime} - {schedule.route}</h3>
-              <button onClick={() => handleDelete(schedule.id)} style={{ color: 'red', border: 'none', background: 'transparent', cursor: 'pointer', fontWeight: 'bold' }}>Delete ✕</button>
-            </div>
-            
-            <p>Status: <strong style={{ color: schedule.status === 'Full' ? 'red' : 'green' }}>{schedule.status}</strong></p>
-            
-            {/* Legend for the Dispatcher */}
-            <div style={{ fontSize: '12px', marginBottom: '10px', display: 'flex', gap: '10px' }}>
-               <span>🟢 Empty</span>
-               <span>🟡 Reserved (Call)</span>
-               <span>🔴 Taken (Walk-in)</span>
-            </div>
-
-            {/* Render Seat Map ONLY if seats array exists */}
-            {schedule.seats ? (
-               <SeatMap 
-                 seats={schedule.seats} 
-                 onSeatClick={(index, status) => handleSeatClick(schedule.id, index, status, schedule.seats)} 
-               />
-            ) : (
-              <p style={{fontSize: '12px', color: 'red'}}>⚠️ Old trip format. Delete and re-add this trip.</p>
-            )}
-            
-            <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
-              <button onClick={() => updateDoc(doc(db, "trips", schedule.id), {status: 'Departed'})} style={{ padding: '8px 12px', cursor: 'pointer', backgroundColor: '#6c757d', color: 'white', border: 'none', borderRadius: '4px' }}>Force Depart</button>
-            </div>
-          </div>
+          <DispatcherTripCard key={schedule.id} schedule={schedule} handleDelete={handleDelete} />
         ))}
       </main>
     </div>
