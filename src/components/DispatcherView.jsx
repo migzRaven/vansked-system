@@ -87,7 +87,8 @@ const DispatcherView = ({ schedules }) => {
     const selectedVan = fleet.find(v => v.plateNumber === selectedPlate);
     
     if (selectedVan) {
-      setNewTrip({ ...newTrip, driver: selectedVan.driver, plateNumber: selectedVan.plateNumber });
+      setNewTrip({ ...newTrip, driver: selectedVan.driver, plateNumber: selectedVan.plateNumber,
+  phone: selectedVan.phone });
     } else {
       setNewTrip({ ...newTrip, driver: '', plateNumber: '' });
     }

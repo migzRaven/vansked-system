@@ -4,7 +4,8 @@ import { db } from '../firebase';
 
 const FleetManager = () => {
   const [fleet, setFleet] = useState([]);
-  const [newVan, setNewVan] = useState({ driver: '', plateNumber: '', vanType: '' });
+  const [newVan, setNewVan] = useState({ driver: '', plateNumber: '', vanType: '', phone: '' });
+  
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "fleet"), (snap) => {
@@ -36,6 +37,7 @@ const FleetManager = () => {
         <h3>Add New Driver / Van</h3>
         <input type="text" placeholder="Driver Name (e.g., Juan Dela Cruz)" value={newVan.driver} onChange={e => setNewVan({...newVan, driver: e.target.value})} required style={{ padding: '8px' }} />
         <input type="text" placeholder="Plate Number (e.g., ABC 123)" value={newVan.plateNumber} onChange={e => setNewVan({...newVan, plateNumber: e.target.value})} required style={{ padding: '8px' }} />
+        <input type="text" placeholder="Contact Number (e.g., 09123456789)" value={newVan.phone} onChange={e => setNewVan({...newVan, phone: e.target.value})} required style={{ padding: '8px' }} />
         <input type="text" placeholder="Van Description (Optional, e.g., White Hi-Ace)" value={newVan.vanType} onChange={e => setNewVan({...newVan, vanType: e.target.value})} style={{ padding: '8px' }} />
         <button type="submit" style={{ padding: '10px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Register Driver</button>
       </form>

@@ -36,7 +36,8 @@ const TripManager = ({ groupId }) => {
       if (isEditMode) {
         setEditTripData({ ...editTripData, driver: selectedVan.driver, plateNumber: selectedVan.plateNumber });
       } else {
-        setNewTrip({ ...newTrip, driver: selectedVan.driver, plateNumber: selectedVan.plateNumber });
+        setNewTrip({ ...newTrip, driver: selectedVan.driver, plateNumber: selectedVan.plateNumber,
+  phone: selectedVan.phone });
       }
     }
   };

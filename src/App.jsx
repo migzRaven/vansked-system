@@ -1,56 +1,76 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
-import { collection, onSnapshot } from 'firebase/firestore'; // Import Firestore functions
-import { db } from './firebase'; // Import our database connection
+import { BrowserRouter, Routes, Route, Link, useNavigate } from 'react-router-dom';
+import { collection, onSnapshot } from 'firebase/firestore';
+import { db } from './firebase';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import ProtectedRoute from './components/ProtectedRoute';
+
+// Import Components
 import PassengerView from './components/PassengerView';
 import DispatcherView from './components/DispatcherView';
-import './App.css';
-import QRCodeView from './components/QRCodeView';
 import TemplateManager from './components/TemplateManager';
 import FleetManager from './components/FleetManager';
+import QRCodeView from './components/QRCodeView';
+import Login from './components/Login';
+import './App.css';
 
-function App() {
+// Navigation Component to handle Logout
+const Navigation = () => {
+  const { currentUser, logout } = useAuth();
+  
+  return (
+    <nav style={{ textAlign: 'center', padding: '15px', backgroundColor: '#333' }}>
+      <Link to="/" style={{ color: 'white', marginRight: '15px', textDecoration: 'none' }}>Passenger Board</Link>
+      <Link to="/qr" style={{ color: 'white', marginRight: '15px', textDecoration: 'none' }}>QR Code</Link>
+      
+      {/* Only show admin links if logged in */}
+      {currentUser ? (
+        <>
+          <Link to="/dispatcher" style={{ color: 'white', marginRight: '15px', textDecoration: 'none' }}>Dispatcher</Link>
+          <Link to="/templates" style={{ color: 'white', marginRight: '15px', textDecoration: 'none' }}>Templates</Link>
+          <Link to="/fleet" style={{ color: 'white', marginRight: '15px', textDecoration: 'none' }}>Fleet</Link>
+          <button onClick={logout} style={{ color: '#ffc107', background: 'transparent', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Logout</button>
+        </>
+      ) : (
+        <Link to="/login" style={{ color: '#ffc107', textDecoration: 'none' }}>Staff Login</Link>
+      )}
+    </nav>
+  );
+};
+
+const AppContent = () => {
   const [schedules, setSchedules] = useState([]);
-  const [loading, setLoading] = useState(true);
 
-  // This useEffect runs once when the app loads
   useEffect(() => {
-    // We listen to a collection called "trips"
     const unsubscribe = onSnapshot(collection(db, "trips"), (snapshot) => {
-      // Every time the database changes, this runs!
-      const scheduleData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      setSchedules(scheduleData);
-      setLoading(false);
+      setSchedules(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     });
-
-    // Cleanup listener when component unmounts
     return () => unsubscribe();
   }, []);
 
-  if (loading) return <div style={{textAlign: 'center', marginTop: '50px'}}>Loading live schedule...</div>;
-
   return (
     <BrowserRouter>
-      <nav style={{ textAlign: 'center', padding: '15px', backgroundColor: '#333' }}>
-        <Link to="/" style={{ color: 'white', marginRight: '20px', textDecoration: 'none' }}>Passenger View</Link>
-        <Link to="/dispatcher" style={{ color: 'white', textDecoration: 'none' }}>Dispatcher Console</Link>
-        <Link to="/qr" style={{ color: 'white', textDecoration: 'none' }}>Terminal QR Code</Link>
-        <Link to="/templates" style={{ color: 'white', marginRight: '20px', textDecoration: 'none' }}>Manage Templates</Link>
-        <Link to="/fleet" style={{ color: 'white', marginRight: '20px', textDecoration: 'none' }}>Fleet Registry</Link>
-      </nav>
-
+      <Navigation />
       <Routes>
-        {/* We only pass schedules now, no more updateScheduleStatus */}
+        {/* Public Routes */}
         <Route path="/" element={<PassengerView schedules={schedules} />} />
-        <Route path="/dispatcher" element={<DispatcherView schedules={schedules} />} />
-        <Route path="/templates" element={<TemplateManager />} />
         <Route path="/qr" element={<QRCodeView />} />
-        <Route path="/fleet" element={<FleetManager />} />
+        <Route path="/login" element={<Login />} />
+        
+        {/* Protected Admin Routes */}
+        <Route path="/dispatcher" element={<ProtectedRoute><DispatcherView schedules={schedules} /></ProtectedRoute>} />
+        <Route path="/templates" element={<ProtectedRoute><TemplateManager /></ProtectedRoute>} />
+        <Route path="/fleet" element={<ProtectedRoute><FleetManager /></ProtectedRoute>} />
       </Routes>
     </BrowserRouter>
+  );
+};
+
+function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }
 

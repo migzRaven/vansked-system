@@ -23,6 +23,10 @@ const ScheduleCard = ({ schedule }) => {
         <p><strong>Driver:</strong> {schedule.driver}</p>
         <p><strong>Plate No:</strong> {schedule.plateNumber}</p>
         <p><strong>Fare:</strong> {schedule.fare}</p>
+        <p>
+  <strong>Driver:</strong> <a href={`tel:${schedule.phone}`} style={{ color: '#007bff', textDecoration: 'none' }}>{schedule.driver} 📞</a>
+</p>
+<p><strong>Dispatcher Hotline:</strong> <a href="tel:09066549947" style={{ color: '#007bff', textDecoration: 'none' }}>0906 654 9947 📞</a></p> 
         
         {/* Show Vacancy Information if Departed */}
         {schedule.status === 'Departed' && schedule.vacantSeats !== undefined && (
