@@ -7,6 +7,7 @@ import DispatcherView from './components/DispatcherView';
 import './App.css';
 import QRCodeView from './components/QRCodeView';
 import TemplateManager from './components/TemplateManager';
+import FleetManager from './components/FleetManager';
 
 function App() {
   const [schedules, setSchedules] = useState([]);
@@ -38,6 +39,7 @@ function App() {
         <Link to="/dispatcher" style={{ color: 'white', textDecoration: 'none' }}>Dispatcher Console</Link>
         <Link to="/qr" style={{ color: 'white', textDecoration: 'none' }}>Terminal QR Code</Link>
         <Link to="/templates" style={{ color: 'white', marginRight: '20px', textDecoration: 'none' }}>Manage Templates</Link>
+        <Link to="/fleet" style={{ color: 'white', marginRight: '20px', textDecoration: 'none' }}>Fleet Registry</Link>
       </nav>
 
       <Routes>
@@ -46,6 +48,7 @@ function App() {
         <Route path="/dispatcher" element={<DispatcherView schedules={schedules} />} />
         <Route path="/templates" element={<TemplateManager />} />
         <Route path="/qr" element={<QRCodeView />} />
+        <Route path="/fleet" element={<FleetManager />} />
       </Routes>
     </BrowserRouter>
   );
