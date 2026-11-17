@@ -1,5 +1,18 @@
+/* Global Reset & Container */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+body {
+  background-color: #f4f4f9;
+  color: #333;
+}
+
 .app-container {
-  max-width: 600px; /* Makes it look like a mobile app on desktop */
+  max-width: 800px;
   margin: 0 auto;
   padding: 20px;
   min-height: 100vh;
@@ -21,3 +34,71 @@
   color: #666;
   font-size: 14px;
 }
+
+/* Navigation */
+.nav-bar {
+  text-align: center;
+  padding: 15px;
+  background-color: var(--navy-900); /* Changed to navy */
+  display: flex;
+  justify-content: center;
+  gap: 15px;
+  flex-wrap: wrap;
+  border-bottom: 2px solid var(--amber); /* Added amber accent */
+}
+
+.nav-link {
+  color: white;
+  text-decoration: none;
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.nav-link:hover { text-decoration: underline; }
+.nav-btn-logout {
+  background: transparent;
+  border: none;
+  color: #ffc107;
+  cursor: pointer;
+  text-decoration: underline;
+  font-size: 16px;
+}
+
+/* Forms & Inputs */
+.form-container {
+  background-color: #e9ecef;
+  padding: 15px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.input-field {
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+/* Buttons */
+.btn {
+  padding: 10px 15px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+  font-size: 14px;
+  text-align: center;
+}
+
+.btn-primary { background-color: #007bff; color: white; }
+.btn-success { background-color: #28a745; color: white; }
+.btn-danger { background-color: #dc3545; color: white; }
+.btn-warning { background-color: #ffc107; color: black; }
+.btn-secondary { background-color: #6c757d; color: white; }
+.btn-outline { background: transparent; border: none; color: red; cursor: pointer; font-weight: bold; }

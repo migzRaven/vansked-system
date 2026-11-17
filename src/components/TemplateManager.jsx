@@ -1,17 +1,30 @@
 import React, { useState, useEffect } from 'react';
-import { collection, addDoc, deleteDoc, doc, onSnapshot, updateDoc } from 'firebase/firestore';
+import { collection, addDoc, deleteDoc, doc, onSnapshot, updateDoc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 
-// --- SUB-COMPONENT: Manages the trips INSIDE a group ---
+const formatTimeDisplay = (time24) => {
+  if (!time24) return '';
+  const [hours, minutes] = time24.split(':');
+  const h = parseInt(hours, 10);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const h12 = h % 12 || 12;
+  return `${h12}:${minutes} ${ampm}`;
+};
+
+const DESTINATIONS = ['Tacloban', 'Sogod', 'Bato'];
+
 const TripManager = ({ groupId }) => {
   const [trips, setTrips] = useState([]);
-  const [fleet, setFleet] = useState([]); // NEW: Store registered fleet
+  const [fleet, setFleet] = useState([]);
+  const [fares, setFares] = useState({});
+  
   const [isAdding, setIsAdding] = useState(false);
-  const [newTrip, setNewTrip] = useState({ departureTime: '', route: '', driver: '', plateNumber: '', fare: '' });
+  const [newTrip, setNewTrip] = useState({ time24: '', destination: 'Tacloban', driver: '', plateNumber: '', phone: '', fare: '' });
+  
   const [editingTripId, setEditingTripId] = useState(null);
   const [editTripData, setEditTripData] = useState({});
 
-  // Listen to the specific subcollection for THIS group
+  // Listen to group trips
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "schedule_groups", groupId, "trips"), (snap) => {
       setTrips(snap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -19,72 +32,109 @@ const TripManager = ({ groupId }) => {
     return () => unsub();
   }, [groupId]);
 
-  // NEW: Listen to the fleet collection
+  // Listen to Fleet and Fares
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "fleet"), (snap) => {
-      setFleet(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    const unsubFleet = onSnapshot(collection(db, "fleet"), (snap) => setFleet(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    const unsubFares = onSnapshot(collection(db, "fares"), (snap) => {
+      const fareData = {}; snap.docs.forEach(d => { fareData[d.id] = d.data().amount; }); setFares(fareData);
     });
-    return () => unsub();
+    return () => { unsubFleet(); unsubFares(); };
   }, []);
 
-  // NEW: Handle selecting a driver from the dropdown
+  // Auto-fill fare for new trip
+  useEffect(() => {
+    if (fares[newTrip.destination]) setNewTrip(prev => ({ ...prev, fare: fares[newTrip.destination] }));
+  }, [newTrip.destination, fares]);
+
+  // Auto-fill fare for editing trip (only when destination changes)
+  useEffect(() => {
+    if (editTripData.destination && fares[editTripData.destination] && !editTripData.fare) {
+      setEditTripData(prev => ({ ...prev, fare: fares[prev.destination] }));
+    }
+  }, [editTripData.destination, fares]);
+
   const handleDriverSelect = (e, isEditMode = false) => {
-    const selectedPlate = e.target.value;
-    const selectedVan = fleet.find(v => v.plateNumber === selectedPlate);
-    
+    const selectedVan = fleet.find(v => v.plateNumber === e.target.value);
     if (selectedVan) {
-      if (isEditMode) {
-        setEditTripData({ ...editTripData, driver: selectedVan.driver, plateNumber: selectedVan.plateNumber });
-      } else {
-        setNewTrip({ ...newTrip, driver: selectedVan.driver, plateNumber: selectedVan.plateNumber,
-  phone: selectedVan.phone });
-      }
+      if (isEditMode) setEditTripData({ ...editTripData, driver: selectedVan.driver, plateNumber: selectedVan.plateNumber, phone: selectedVan.phone || '' });
+      else setNewTrip({ ...newTrip, driver: selectedVan.driver, plateNumber: selectedVan.plateNumber, phone: selectedVan.phone || '' });
+    } else {
+      if (isEditMode) setEditTripData({ ...editTripData, driver: '', plateNumber: '', phone: '' });
+      else setNewTrip({ ...newTrip, driver: '', plateNumber: '', phone: '' });
     }
   };
 
   const handleAddTrip = async (e) => {
     e.preventDefault();
-    await addDoc(collection(db, "schedule_groups", groupId, "trips"), newTrip);
-    setNewTrip({ departureTime: '', route: '', driver: '', plateNumber: '', fare: '' });
-    setIsAdding(false);
+    try {
+      const finalRoute = `St. Bernard to ${newTrip.destination}`;
+      const displayTime = formatTimeDisplay(newTrip.time24);
+      await addDoc(collection(db, "schedule_groups", groupId, "trips"), {
+        time24: newTrip.time24,
+        departureTime: displayTime,
+        destination: newTrip.destination,
+        route: finalRoute,
+        driver: newTrip.driver,
+        plateNumber: newTrip.plateNumber,
+        phone: newTrip.phone,
+        fare: newTrip.fare
+      });
+      setNewTrip({ time24: '', destination: 'Tacloban', driver: '', plateNumber: '', phone: '', fare: '' });
+      setIsAdding(false);
+    } catch (error) { alert("Error adding trip: " + error.message); }
   };
 
   const handleDeleteTrip = async (tripId) => {
-    if(window.confirm("Delete this trip?")) {
-      await deleteDoc(doc(db, "schedule_groups", groupId, "trips", tripId));
-    }
+    if(window.confirm("Delete this trip?")) await deleteDoc(doc(db, "schedule_groups", groupId, "trips", tripId));
   };
 
   const handleUpdateTrip = async (e) => {
     e.preventDefault();
-    await updateDoc(doc(db, "schedule_groups", groupId, "trips", editingTripId), editTripData);
-    setEditingTripId(null);
+    try {
+      const finalRoute = `St. Bernard to ${editTripData.destination}`;
+      const displayTime = formatTimeDisplay(editTripData.time24);
+      await updateDoc(doc(db, "schedule_groups", groupId, "trips", editingTripId), {
+        ...editTripData,
+        route: finalRoute,
+        departureTime: displayTime
+      });
+      setEditingTripId(null);
+    } catch (error) { alert("Error updating trip: " + error.message); }
   };
 
   return (
     <div style={{ padding: '15px', backgroundColor: '#f8f9fa', borderTop: '1px solid #ddd' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
         <h5 style={{ margin: 0 }}>Trips in this Group</h5>
-        <button onClick={() => setIsAdding(!isAdding)} style={{ padding: '5px 10px', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}>
+        <button onClick={() => setIsAdding(!isAdding)} className="btn btn-primary" style={{ padding: '5px 10px', fontSize: '12px' }}>
           {isAdding ? 'Cancel' : '+ Add Trip'}
         </button>
       </div>
 
       {isAdding && (
-        <form onSubmit={handleAddTrip} style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '15px', padding: '10px', backgroundColor: '#fff', border: '1px solid #ccc', borderRadius: '4px' }}>
-           <input type="text" placeholder="Time (e.g. 6:00 AM)" value={newTrip.departureTime} onChange={e => setNewTrip({...newTrip, departureTime: e.target.value})} required style={{ padding: '6px' }} />
-           <input type="text" placeholder="Route" value={newTrip.route} onChange={e => setNewTrip({...newTrip, route: e.target.value})} required style={{ padding: '6px' }} />
+        <form onSubmit={handleAddTrip} className="form-group" style={{ marginBottom: '15px', padding: '10px', backgroundColor: '#fff', border: '1px solid #ccc', borderRadius: '4px' }}>
+           <label style={{ fontSize: '12px', fontWeight: 'bold' }}>Departure Time</label>
+           <input type="time" value={newTrip.time24} onChange={e => setNewTrip({...newTrip, time24: e.target.value})} required className="input-field" />
            
-           {/* NEW: DROPDOWN FOR DRIVER */}
-           <select value={newTrip.plateNumber} onChange={(e) => handleDriverSelect(e, false)} required style={{ padding: '6px' }}>
-             <option value="">-- Select Driver & Plate No --</option>
-             {fleet.map(van => (
-               <option key={van.id} value={van.plateNumber}>{van.driver} ({van.plateNumber})</option>
-             ))}
+           <label style={{ fontSize: '12px', fontWeight: 'bold', marginTop: '5px' }}>Route</label>
+           <div style={{ display: 'flex', gap: '5px' }}>
+             <input type="text" value="St. Bernard" readOnly className="input-field" style={{ flex: 1, backgroundColor: '#e9ecef' }} />
+             <span style={{ alignSelf: 'center' }}>to</span>
+             <select value={newTrip.destination} onChange={e => setNewTrip({...newTrip, destination: e.target.value})} className="input-field" style={{ flex: 1 }}>
+               {DESTINATIONS.map(dest => <option key={dest} value={dest}>{dest}</option>)}
+             </select>
+           </div>
+
+           <label style={{ fontSize: '12px', fontWeight: 'bold', marginTop: '5px' }}>Driver & Van</label>
+           <select value={newTrip.plateNumber} onChange={(e) => handleDriverSelect(e, false)} required className="input-field">
+             <option value="">-- Select Driver --</option>
+             {fleet.map(van => <option key={van.id} value={van.plateNumber}>{van.driver} ({van.plateNumber})</option>)}
            </select>
 
-           <input type="text" placeholder="Fare" value={newTrip.fare} onChange={e => setNewTrip({...newTrip, fare: e.target.value})} required style={{ padding: '6px' }} />
-           <button type="submit" style={{ padding: '8px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold' }}>Save Trip</button>
+           <label style={{ fontSize: '12px', fontWeight: 'bold', marginTop: '5px' }}>Fare</label>
+           <input type="text" placeholder="Fare" value={newTrip.fare} onChange={e => setNewTrip({...newTrip, fare: e.target.value})} required className="input-field" />
+
+           <button type="submit" className="btn btn-success" style={{ marginTop: '10px' }}>Save Trip</button>
         </form>
       )}
 
@@ -92,37 +142,35 @@ const TripManager = ({ groupId }) => {
         <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {trips.map(trip => (
             <li key={trip.id} style={{ backgroundColor: '#fff', padding: '10px', border: '1px solid #ddd', borderRadius: '4px' }}>
-              
               {editingTripId === trip.id ? (
-                /* EDIT MODE */
-                <form onSubmit={handleUpdateTrip} style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                  <input type="text" value={editTripData.departureTime} onChange={e => setEditTripData({...editTripData, departureTime: e.target.value})} required style={{ padding: '4px' }} />
-                  <input type="text" value={editTripData.route} onChange={e => setEditTripData({...editTripData, route: e.target.value})} required style={{ padding: '4px' }} />
-                  
-                  {/* NEW: DROPDOWN FOR DRIVER IN EDIT MODE */}
-                  <select value={editTripData.plateNumber} onChange={(e) => handleDriverSelect(e, true)} required style={{ padding: '4px' }}>
-                    <option value="">-- Select Driver & Plate No --</option>
-                    {fleet.map(van => (
-                      <option key={van.id} value={van.plateNumber}>{van.driver} ({van.plateNumber})</option>
-                    ))}
+                <form onSubmit={handleUpdateTrip} className="form-group">
+                  <input type="time" value={editTripData.time24} onChange={e => setEditTripData({...editTripData, time24: e.target.value})} required className="input-field" />
+                  <div style={{ display: 'flex', gap: '5px' }}>
+                    <input type="text" value="St. Bernard" readOnly className="input-field" style={{ flex: 1, backgroundColor: '#e9ecef' }} />
+                    <span style={{ alignSelf: 'center' }}>to</span>
+                    <select value={editTripData.destination} onChange={e => setEditTripData({...editTripData, destination: e.target.value})} className="input-field" style={{ flex: 1 }}>
+                      {DESTINATIONS.map(dest => <option key={dest} value={dest}>{dest}</option>)}
+                    </select>
+                  </div>
+                  <select value={editTripData.plateNumber} onChange={(e) => handleDriverSelect(e, true)} required className="input-field">
+                    <option value="">-- Select Driver --</option>
+                    {fleet.map(van => <option key={van.id} value={van.plateNumber}>{van.driver} ({van.plateNumber})</option>)}
                   </select>
-
-                  <input type="text" value={editTripData.fare} onChange={e => setEditTripData({...editTripData, fare: e.target.value})} required style={{ padding: '4px' }} />
+                  <input type="text" value={editTripData.fare} onChange={e => setEditTripData({...editTripData, fare: e.target.value})} required className="input-field" />
                   <div style={{ display: 'flex', gap: '5px', marginTop: '5px' }}>
-                    <button type="submit" style={{ padding: '4px 8px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '4px' }}>Save</button>
-                    <button type="button" onClick={() => setEditingTripId(null)} style={{ padding: '4px 8px', backgroundColor: '#6c757d', color: 'white', border: 'none', borderRadius: '4px' }}>Cancel</button>
+                    <button type="submit" className="btn btn-success" style={{ padding: '4px 8px' }}>Save</button>
+                    <button type="button" onClick={() => setEditingTripId(null)} className="btn btn-secondary" style={{ padding: '4px 8px' }}>Cancel</button>
                   </div>
                 </form>
               ) : (
-                /* VIEW MODE */
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ fontSize: '13px' }}>
                     <strong>{trip.departureTime}</strong> - {trip.route} <br/>
-                    <span style={{ color: '#666' }}>Driver: {trip.driver} ({trip.plateNumber}) | Fare: {trip.fare}</span>
+                    <span style={{ color: '#666' }}>Driver: {trip.driver} | Fare: ₱{trip.fare}</span>
                   </div>
                   <div style={{ display: 'flex', gap: '5px' }}>
-                    <button onClick={() => { setEditingTripId(trip.id); setEditTripData(trip); }} style={{ padding: '4px 8px', backgroundColor: '#ffc107', color: 'black', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Edit</button>
-                    <button onClick={() => handleDeleteTrip(trip.id)} style={{ padding: '4px 8px', backgroundColor: '#dc3545', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Delete</button>
+                    <button onClick={() => { setEditingTripId(trip.id); setEditTripData(trip); }} className="btn btn-warning" style={{ padding: '4px 8px' }}>Edit</button>
+                    <button onClick={() => handleDeleteTrip(trip.id)} className="btn btn-danger" style={{ padding: '4px 8px' }}>Delete</button>
                   </div>
                 </div>
               )}
@@ -134,7 +182,6 @@ const TripManager = ({ groupId }) => {
   );
 };
 
-// --- MAIN COMPONENT ---
 const TemplateManager = () => {
   const [groups, setGroups] = useState([]);
   const [newGroup, setNewGroup] = useState({ name: '', days: { Mon: true, Tue: true, Wed: true, Thu: true, Fri: true, Sat: true, Sun: false } });
@@ -154,9 +201,7 @@ const TemplateManager = () => {
   };
 
   const handleDeleteGroup = async (id) => {
-    if (window.confirm("Delete this entire group?")) {
-       await deleteDoc(doc(db, "schedule_groups", id));
-    }
+    if (window.confirm("Delete this entire group?")) await deleteDoc(doc(db, "schedule_groups", id));
   };
 
   return (
@@ -166,10 +211,9 @@ const TemplateManager = () => {
         <p>Group multiple trips under one schedule</p>
       </header>
 
-      <form onSubmit={handleCreateGroup} style={{ backgroundColor: '#e9ecef', padding: '15px', borderRadius: '8px', marginBottom: '20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+      <form onSubmit={handleCreateGroup} className="form-container form-group">
         <h3>Create New Schedule Group</h3>
-        <input type="text" placeholder="Group Name (e.g., Weekday Schedule, Weekend Schedule)" value={newGroup.name} onChange={e => setNewGroup({...newGroup, name: e.target.value})} required style={{ padding: '8px' }} />
-        
+        <input type="text" placeholder="Group Name (e.g., Weekday Schedule)" value={newGroup.name} onChange={e => setNewGroup({...newGroup, name: e.target.value})} required className="input-field" />
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '5px' }}>
           <strong>Active Days:</strong>
           {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
@@ -178,30 +222,24 @@ const TemplateManager = () => {
             </label>
           ))}
         </div>
-        <button type="submit" style={{ padding: '10px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', marginTop: '10px' }}>Create Group</button>
+        <button type="submit" className="btn btn-success" style={{ marginTop: '10px' }}>Create Group</button>
       </form>
 
       <div>
         <h3>Your Schedule Groups</h3>
-        {groups.length === 0 && <p style={{color: '#666'}}>No groups created yet.</p>}
-        
         {groups.map(group => (
           <div key={group.id} style={{ border: '1px solid #ccc', borderRadius: '8px', marginBottom: '15px', overflow: 'hidden' }}>
-            
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px', backgroundColor: '#fff', cursor: 'pointer' }} onClick={() => setExpandedGroupId(expandedGroupId === group.id ? null : group.id)}>
               <div>
                 <h4 style={{ margin: 0, color: '#0056b3' }}>{group.name}</h4>
                 <span style={{ fontSize: '12px', color: '#666' }}>Days: {Object.keys(group.days || {}).filter(d => group.days[d]).join(', ')}</span>
               </div>
               <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
-                <button onClick={(e) => { e.stopPropagation(); handleDeleteGroup(group.id); }} style={{ color: 'red', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '12px' }}>Delete Group</button>
+                <button onClick={(e) => { e.stopPropagation(); handleDeleteGroup(group.id); }} className="btn-outline" style={{ fontSize: '12px' }}>Delete Group</button>
                 <span>{expandedGroupId === group.id ? '▲' : '▼'}</span>
               </div>
             </div>
-            
-            {expandedGroupId === group.id && (
-              <TripManager groupId={group.id} />
-            )}
+            {expandedGroupId === group.id && <TripManager groupId={group.id} />}
           </div>
         ))}
       </div>

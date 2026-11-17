@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Link, useNavigate } from 'react-router-dom';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
+import { collection, onSnapshot, query, where, orderBy } from 'firebase/firestore'; // Added query, where, orderBy
 import { db } from './firebase';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 
-// Import Components
 import PassengerView from './components/PassengerView';
 import DispatcherView from './components/DispatcherView';
 import TemplateManager from './components/TemplateManager';
@@ -14,25 +13,23 @@ import QRCodeView from './components/QRCodeView';
 import Login from './components/Login';
 import './App.css';
 
-// Navigation Component to handle Logout
 const Navigation = () => {
   const { currentUser, logout } = useAuth();
   
   return (
-    <nav style={{ textAlign: 'center', padding: '15px', backgroundColor: '#333' }}>
-      <Link to="/" style={{ color: 'white', marginRight: '15px', textDecoration: 'none' }}>Passenger Board</Link>
-      <Link to="/qr" style={{ color: 'white', marginRight: '15px', textDecoration: 'none' }}>QR Code</Link>
+    <nav className="nav-bar">
+      <Link to="/" className="nav-link">Passenger Board</Link>
+      <Link to="/qr" className="nav-link">QR Code</Link>
       
-      {/* Only show admin links if logged in */}
       {currentUser ? (
         <>
-          <Link to="/dispatcher" style={{ color: 'white', marginRight: '15px', textDecoration: 'none' }}>Dispatcher</Link>
-          <Link to="/templates" style={{ color: 'white', marginRight: '15px', textDecoration: 'none' }}>Templates</Link>
-          <Link to="/fleet" style={{ color: 'white', marginRight: '15px', textDecoration: 'none' }}>Fleet</Link>
-          <button onClick={logout} style={{ color: '#ffc107', background: 'transparent', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Logout</button>
+          <Link to="/dispatcher" className="nav-link">Dispatcher</Link>
+          <Link to="/templates" className="nav-link">Templates</Link>
+          <Link to="/fleet" className="nav-link">Fleet</Link>
+          <button onClick={logout} className="nav-btn-logout">Logout</button>
         </>
       ) : (
-        <Link to="/login" style={{ color: '#ffc107', textDecoration: 'none' }}>Staff Login</Link>
+        <Link to="/login" className="nav-link" style={{ color: '#ffc107' }}>Staff Login</Link>
       )}
     </nav>
   );
@@ -42,7 +39,22 @@ const AppContent = () => {
   const [schedules, setSchedules] = useState([]);
 
   useEffect(() => {
-    const unsubscribe = onSnapshot(collection(db, "trips"), (snapshot) => {
+    // Get today's date in YYYY-MM-DD format specifically for Manila timezone
+    const todayStr = new Intl.DateTimeFormat('en-CA', { 
+      timeZone: 'Asia/Manila', 
+      year: 'numeric', 
+      month: '2-digit', 
+      day: '2-digit' 
+    }).format(new Date());
+
+    // Query only today's trips, sorted by the sortable departureAt timestamp
+    const q = query(
+      collection(db, "trips"), 
+      where("date", "==", todayStr),
+      orderBy("departureAt", "asc")
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
       setSchedules(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     });
     return () => unsubscribe();
@@ -52,12 +64,10 @@ const AppContent = () => {
     <BrowserRouter>
       <Navigation />
       <Routes>
-        {/* Public Routes */}
         <Route path="/" element={<PassengerView schedules={schedules} />} />
         <Route path="/qr" element={<QRCodeView />} />
         <Route path="/login" element={<Login />} />
         
-        {/* Protected Admin Routes */}
         <Route path="/dispatcher" element={<ProtectedRoute><DispatcherView schedules={schedules} /></ProtectedRoute>} />
         <Route path="/templates" element={<ProtectedRoute><TemplateManager /></ProtectedRoute>} />
         <Route path="/fleet" element={<ProtectedRoute><FleetManager /></ProtectedRoute>} />

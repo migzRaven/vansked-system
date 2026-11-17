@@ -5,7 +5,8 @@ const QRCodeView = () => {
   // For the demo, the QR code links to the local Passenger View.
   // When you deploy this to the internet later, you just change this URL to your live domain.
   //const passengerUrl = window.location.origin;
-  const passengerUrl = "http://10.0.10.180:5173/";
+  const passengerUrl = "http://192.168.100.10:5173/";
+ 
 
   return (
     <div className="app-container" style={{ textAlign: 'center', marginTop: '50px' }}>

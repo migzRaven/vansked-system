@@ -1,0 +1,37 @@
+/* src/styles/tokens.css */
+:root {
+  --navy-900: #0B1B2B;
+  --navy-700: #1B3550;
+  --amber: #FFB703;
+  --bg: #F3F6FA;
+  --surface: #ffffff;
+  --text: #0B1B2B;
+  --muted: #5B6B7C;
+  --line: #E3E9F0;
+  
+  --waiting: #2563EB;  --waiting-bg: #E8F0FE;
+  --boarding: #15803D; --boarding-bg: #DCFCE7;
+  --full: #B91C1C;     --full-bg: #FEE2E2;
+  --departed: #475569; --departed-bg: #E9EEF4;
+  
+  --radius: 16px;
+  --shadow: 0 4px 12px rgba(11, 27, 43, 0.08);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background-color: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+.mono {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
