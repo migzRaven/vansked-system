@@ -19,6 +19,9 @@
 .trip.full { --c: var(--full); }
 .trip.departed { --c: var(--departed); opacity: 0.75; }
 
+.trip.scheduled { --c: #8B5CF6; opacity: 0.8; } 
+.pill--scheduled { background: #EDE9FE; color: #6D28D9; }
+
 .trip__time {
   font-size: 1.6rem;
   font-weight: 800;

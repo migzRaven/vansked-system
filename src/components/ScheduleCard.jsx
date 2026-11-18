@@ -2,14 +2,31 @@ import React from 'react';
 import './ScheduleCard.css';
 
 const STATUS = {
-  Waiting:  { cls: 'waiting',  label: 'Waiting' },
-  Boarding: { cls: 'boarding', label: 'Now Boarding' },
-  Full:     { cls: 'full',     label: 'Full' },
-  Departed: { cls: 'departed', label: 'Departed' },
+  Waiting:   { cls: 'waiting',   label: 'Waiting' },
+  Boarding:  { cls: 'boarding',  label: 'Now Boarding' },
+  Full:      { cls: 'full',      label: 'Full' },
+  Departed:  { cls: 'departed',  label: 'Departed' },
+  Scheduled: { cls: 'scheduled', label: 'Scheduled' }
 };
 
 export default function ScheduleCard({ schedule: s }) {
-  const st = STATUS[s.status] ?? STATUS.Waiting;
+  // TIME CHECKER: Has it been more than 30 mins since departure?
+  let isPastTime = false;
+  if (s.departureAt) {
+    const depTimeMs = s.departureAt.toDate().getTime();
+    const nowMs = new Date().getTime();
+    if (nowMs > depTimeMs + 1800000) { // 30 minutes
+      isPastTime = true;
+    }
+  }
+
+  // If time passed and dispatcher hasn't updated, show "Scheduled" to passenger
+  let displayStatus = s.status;
+  if (isPastTime && (s.status === 'Waiting' || s.status === 'Boarding' || s.status === 'Overdue')) {
+    displayStatus = 'Scheduled';
+  }
+
+  const st = STATUS[displayStatus] ?? STATUS.Waiting;
 
   return (
     <article className={`trip ${st.cls}`}>
@@ -30,8 +47,8 @@ export default function ScheduleCard({ schedule: s }) {
         </p>
       )}
 
-      {/* Only show call button if not departed or full */}
-      {s.status !== 'Departed' && s.status !== 'Full' && s.phone && (
+      {/* Only show call button if it's actively waiting or boarding */}
+      {displayStatus !== 'Departed' && displayStatus !== 'Full' && displayStatus !== 'Scheduled' && s.phone && (
         <a className="btn-call" href={`tel:${s.phone}`}>
           📞 Call {s.driver.split(' ')[0]}
         </a>

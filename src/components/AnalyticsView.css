@@ -1,0 +1,75 @@
+.analytics-kpi-strip {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 15px;
+  margin-bottom: 30px;
+}
+
+.analytics-kpi {
+  background: var(--navy-900);
+  color: white;
+  padding: 20px;
+  border-radius: 12px;
+  text-align: center;
+  box-shadow: var(--shadow);
+}
+
+.analytics-kpi h4 {
+  font-size: 0.8rem;
+  color: #a0aec0;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.analytics-kpi p {
+  font-size: 2rem;
+  font-weight: 800;
+  color: var(--amber);
+}
+
+.chart-container, .event-log-container {
+  background: var(--surface);
+  padding: 20px;
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  margin-bottom: 30px;
+  border: 1px solid var(--line);
+}
+
+.chart-container h3, .event-log-container h3 {
+  color: var(--text);
+  font-size: 1.1rem;
+}
+
+.table-wrapper {
+  overflow-x: auto;
+}
+
+.event-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.event-table th {
+  text-align: left;
+  padding: 10px;
+  border-bottom: 2px solid var(--line);
+  color: var(--muted);
+  text-transform: uppercase;
+  font-size: 0.75rem;
+}
+
+.event-table td {
+  padding: 12px 10px;
+  border-bottom: 1px solid var(--line);
+  color: var(--text);
+}
+
+.event-badge {
+  background: var(--bg);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+  color: var(--navy-700);
+}

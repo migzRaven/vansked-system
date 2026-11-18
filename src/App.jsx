@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
-import { collection, onSnapshot, query, where, orderBy } from 'firebase/firestore'; // Added query, where, orderBy
+import { collection, onSnapshot, query, where } from 'firebase/firestore'; // Removed orderBy
 import { db } from './firebase';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -12,6 +12,7 @@ import FleetManager from './components/FleetManager';
 import QRCodeView from './components/QRCodeView';
 import Login from './components/Login';
 import './App.css';
+import AnalyticsView from './components/AnalyticsView';
 
 const Navigation = () => {
   const { currentUser, logout } = useAuth();
@@ -24,6 +25,7 @@ const Navigation = () => {
       {currentUser ? (
         <>
           <Link to="/dispatcher" className="nav-link">Dispatcher</Link>
+           <Link to="/analytics" className="nav-link">Analytics</Link>
           <Link to="/templates" className="nav-link">Templates</Link>
           <Link to="/fleet" className="nav-link">Fleet</Link>
           <button onClick={logout} className="nav-btn-logout">Logout</button>
@@ -47,16 +49,28 @@ const AppContent = () => {
       day: '2-digit' 
     }).format(new Date());
 
-    // Query only today's trips, sorted by the sortable departureAt timestamp
+    // 1. Fetch only today's trips (removed orderBy to avoid Composite Index requirement)
     const q = query(
       collection(db, "trips"), 
-      where("date", "==", todayStr),
-      orderBy("departureAt", "asc")
+      where("date", "==", todayStr)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setSchedules(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      const tripsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      
+      // 2. Sort locally by departureAt timestamp
+      tripsData.sort((a, b) => {
+        if (!a.departureAt || !b.departureAt) return 0;
+        return a.departureAt.toMillis() - b.departureAt.toMillis();
+      });
+
+      setSchedules(tripsData);
+    }, (error) => {
+      // 3. Added an error handler so we can see if Firebase blocks the read
+      console.error("Firestore error: ", error);
+      alert("Failed to load schedule: " + error.message);
     });
+
     return () => unsubscribe();
   }, []);
 
@@ -71,6 +85,7 @@ const AppContent = () => {
         <Route path="/dispatcher" element={<ProtectedRoute><DispatcherView schedules={schedules} /></ProtectedRoute>} />
         <Route path="/templates" element={<ProtectedRoute><TemplateManager /></ProtectedRoute>} />
         <Route path="/fleet" element={<ProtectedRoute><FleetManager /></ProtectedRoute>} />
+        <Route path="/analytics" element={<ProtectedRoute><AnalyticsView /></ProtectedRoute>} />
       </Routes>
     </BrowserRouter>
   );

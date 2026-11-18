@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, addDoc, deleteDoc, doc, onSnapshot, updateDoc, setDoc } from 'firebase/firestore';
+import { collection, addDoc, deleteDoc, doc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 
 const formatTimeDisplay = (time24) => {
@@ -24,7 +24,6 @@ const TripManager = ({ groupId }) => {
   const [editingTripId, setEditingTripId] = useState(null);
   const [editTripData, setEditTripData] = useState({});
 
-  // Listen to group trips
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "schedule_groups", groupId, "trips"), (snap) => {
       setTrips(snap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -32,7 +31,6 @@ const TripManager = ({ groupId }) => {
     return () => unsub();
   }, [groupId]);
 
-  // Listen to Fleet and Fares
   useEffect(() => {
     const unsubFleet = onSnapshot(collection(db, "fleet"), (snap) => setFleet(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
     const unsubFares = onSnapshot(collection(db, "fares"), (snap) => {
@@ -46,13 +44,6 @@ const TripManager = ({ groupId }) => {
     if (fares[newTrip.destination]) setNewTrip(prev => ({ ...prev, fare: fares[newTrip.destination] }));
   }, [newTrip.destination, fares]);
 
-  // Auto-fill fare for editing trip (only when destination changes)
-  useEffect(() => {
-    if (editTripData.destination && fares[editTripData.destination] && !editTripData.fare) {
-      setEditTripData(prev => ({ ...prev, fare: fares[prev.destination] }));
-    }
-  }, [editTripData.destination, fares]);
-
   const handleDriverSelect = (e, isEditMode = false) => {
     const selectedVan = fleet.find(v => v.plateNumber === e.target.value);
     if (selectedVan) {
@@ -62,6 +53,15 @@ const TripManager = ({ groupId }) => {
       if (isEditMode) setEditTripData({ ...editTripData, driver: '', plateNumber: '', phone: '' });
       else setNewTrip({ ...newTrip, driver: '', plateNumber: '', phone: '' });
     }
+  };
+
+  const handleEditDestinationChange = (e) => {
+    const newDest = e.target.value;
+    setEditTripData({
+      ...editTripData,
+      destination: newDest,
+      fare: fares[newDest] || editTripData.fare // Auto-fill fare from matrix if available
+    });
   };
 
   const handleAddTrip = async (e) => {
@@ -104,25 +104,28 @@ const TripManager = ({ groupId }) => {
 
   return (
     <div style={{ padding: '15px', backgroundColor: '#f8f9fa', borderTop: '1px solid #ddd' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
-        <h5 style={{ margin: 0 }}>Trips in this Group</h5>
-        <button onClick={() => setIsAdding(!isAdding)} className="btn btn-primary" style={{ padding: '5px 10px', fontSize: '12px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}>
+        <h5 style={{ margin: 0, fontSize: '1rem' }}>Trips in this Group</h5>
+        <button onClick={() => setIsAdding(!isAdding)} className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '12px' }}>
           {isAdding ? 'Cancel' : '+ Add Trip'}
         </button>
       </div>
 
       {isAdding && (
-        <form onSubmit={handleAddTrip} className="form-group" style={{ marginBottom: '15px', padding: '10px', backgroundColor: '#fff', border: '1px solid #ccc', borderRadius: '4px' }}>
+        <form onSubmit={handleAddTrip} className="form-group" style={{ marginBottom: '15px', padding: '15px', backgroundColor: '#fff', border: '1px solid #ccc', borderRadius: '8px' }}>
            <label style={{ fontSize: '12px', fontWeight: 'bold' }}>Departure Time</label>
            <input type="time" value={newTrip.time24} onChange={e => setNewTrip({...newTrip, time24: e.target.value})} required className="input-field" />
            
+           {/* MOBILE FRIENDLY ROUTE DROPDOWNS */}
            <label style={{ fontSize: '12px', fontWeight: 'bold', marginTop: '5px' }}>Route</label>
-           <div style={{ display: 'flex', gap: '5px' }}>
-             <input type="text" value="St. Bernard" readOnly className="input-field" style={{ flex: 1, backgroundColor: '#e9ecef' }} />
-             <span style={{ alignSelf: 'center' }}>to</span>
-             <select value={newTrip.destination} onChange={e => setNewTrip({...newTrip, destination: e.target.value})} className="input-field" style={{ flex: 1 }}>
-               {DESTINATIONS.map(dest => <option key={dest} value={dest}>{dest}</option>)}
-             </select>
+           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+             <input type="text" value="St. Bernard" readOnly className="input-field" style={{ backgroundColor: 'var(--bg)', color: 'var(--muted)', textAlign: 'center' }} />
+             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+               <span style={{ fontSize: '14px', fontWeight: 'bold' }}>to</span>
+               <select value={newTrip.destination} onChange={e => setNewTrip({...newTrip, destination: e.target.value})} className="input-field" style={{ flex: 1 }}>
+                 {DESTINATIONS.map(dest => <option key={dest} value={dest}>{dest}</option>)}
+               </select>
+             </div>
            </div>
 
            <label style={{ fontSize: '12px', fontWeight: 'bold', marginTop: '5px' }}>Driver & Van</label>
@@ -134,43 +137,48 @@ const TripManager = ({ groupId }) => {
            <label style={{ fontSize: '12px', fontWeight: 'bold', marginTop: '5px' }}>Fare</label>
            <input type="text" placeholder="Fare" value={newTrip.fare} onChange={e => setNewTrip({...newTrip, fare: e.target.value})} required className="input-field" />
 
-           <button type="submit" className="btn btn-success" style={{ marginTop: '10px' }}>Save Trip</button>
+           <button type="submit" className="btn btn-success" style={{ marginTop: '15px' }}>Save Trip</button>
         </form>
       )}
 
       {trips.length === 0 ? <p style={{ fontSize: '13px', color: '#666' }}>No trips added yet.</p> : (
-        <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {trips.map(trip => (
-            <li key={trip.id} style={{ backgroundColor: '#fff', padding: '10px', border: '1px solid #ddd', borderRadius: '4px' }}>
+            <li key={trip.id} style={{ backgroundColor: '#fff', padding: '12px', border: '1px solid #ddd', borderRadius: '8px' }}>
               {editingTripId === trip.id ? (
                 <form onSubmit={handleUpdateTrip} className="form-group">
                   <input type="time" value={editTripData.time24} onChange={e => setEditTripData({...editTripData, time24: e.target.value})} required className="input-field" />
-                  <div style={{ display: 'flex', gap: '5px' }}>
-                    <input type="text" value="St. Bernard" readOnly className="input-field" style={{ flex: 1, backgroundColor: '#e9ecef' }} />
-                    <span style={{ alignSelf: 'center' }}>to</span>
-                    <select value={editTripData.destination} onChange={e => setEditTripData({...editTripData, destination: e.target.value})} className="input-field" style={{ flex: 1 }}>
-                      {DESTINATIONS.map(dest => <option key={dest} value={dest}>{dest}</option>)}
-                    </select>
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', margin: '8px 0' }}>
+                    <input type="text" value="St. Bernard" readOnly className="input-field" style={{ backgroundColor: 'var(--bg)', color: 'var(--muted)', textAlign: 'center' }} />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <span style={{ fontSize: '14px', fontWeight: 'bold' }}>to</span>
+                      <select value={editTripData.destination} onChange={handleEditDestinationChange} className="input-field" style={{ flex: 1 }}>
+                        {DESTINATIONS.map(dest => <option key={dest} value={dest}>{dest}</option>)}
+                      </select>
+                    </div>
                   </div>
+
                   <select value={editTripData.plateNumber} onChange={(e) => handleDriverSelect(e, true)} required className="input-field">
                     <option value="">-- Select Driver --</option>
                     {fleet.map(van => <option key={van.id} value={van.plateNumber}>{van.driver} ({van.plateNumber})</option>)}
                   </select>
-                  <input type="text" value={editTripData.fare} onChange={e => setEditTripData({...editTripData, fare: e.target.value})} required className="input-field" />
-                  <div style={{ display: 'flex', gap: '5px', marginTop: '5px' }}>
-                    <button type="submit" className="btn btn-success" style={{ padding: '4px 8px' }}>Save</button>
-                    <button type="button" onClick={() => setEditingTripId(null)} className="btn btn-secondary" style={{ padding: '4px 8px' }}>Cancel</button>
+                  <input type="text" value={editTripData.fare} onChange={e => setEditTripData({...editTripData, fare: e.target.value})} required className="input-field" style={{ marginTop: '8px' }} />
+                  
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                    <button type="submit" className="btn btn-success" style={{ flex: 1 }}>Save</button>
+                    <button type="button" onClick={() => setEditingTripId(null)} className="btn btn-secondary" style={{ flex: 1 }}>Cancel</button>
                   </div>
                 </form>
               ) : (
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ fontSize: '13px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ fontSize: '14px' }}>
                     <strong>{trip.departureTime}</strong> - {trip.route} <br/>
                     <span style={{ color: '#666' }}>Driver: {trip.driver} | Fare: ₱{trip.fare}</span>
                   </div>
-                  <div style={{ display: 'flex', gap: '5px' }}>
-                    <button onClick={() => { setEditingTripId(trip.id); setEditTripData(trip); }} className="btn btn-warning" style={{ padding: '4px 8px' }}>Edit</button>
-                    <button onClick={() => handleDeleteTrip(trip.id)} className="btn btn-danger" style={{ padding: '4px 8px' }}>Delete</button>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button onClick={() => { setEditingTripId(trip.id); setEditTripData(trip); }} className="btn btn-warning" style={{ flex: 1, padding: '6px' }}>Edit</button>
+                    <button onClick={() => handleDeleteTrip(trip.id)} className="btn btn-danger" style={{ flex: 1, padding: '6px' }}>Delete</button>
                   </div>
                 </div>
               )}
@@ -235,7 +243,7 @@ const TemplateManager = () => {
                 <span style={{ fontSize: '12px', color: '#666' }}>Days: {Object.keys(group.days || {}).filter(d => group.days[d]).join(', ')}</span>
               </div>
               <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
-                <button onClick={(e) => { e.stopPropagation(); handleDeleteGroup(group.id); }} className="btn-outline" style={{ fontSize: '12px' }}>Delete Group</button>
+                <button onClick={(e) => { e.stopPropagation(); handleDeleteGroup(group.id); }} className="btn-outline" style={{ fontSize: '12px' }}>Delete</button>
                 <span>{expandedGroupId === group.id ? '▲' : '▼'}</span>
               </div>
             </div>

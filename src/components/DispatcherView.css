@@ -1,42 +1,150 @@
+/* KPI Strip */
+.kpi-strip {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.kpi-card {
+  background: var(--surface);
+  padding: 12px;
+  border-radius: 12px;
+  text-align: center;
+  box-shadow: var(--shadow);
+  border: 1px solid var(--line);
+}
+
+.kpi-card h4 {
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.kpi-card .kpi-value {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--text);
+}
+
+/* Trip Card */
+.trip-card {
+  background: var(--surface);
+  border-radius: 16px;
+  padding: 16px;
+  margin-bottom: 16px;
+  box-shadow: var(--shadow);
+  border: 1px solid var(--line);
+  transition: opacity 0.3s ease;
+}
+
+.trip-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.trip-header h3 {
+  font-size: 1.1rem;
+  color: var(--text);
+}
+
+.trip-header p {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.segmented-control {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  background: var(--bg);
+  border-radius: 8px;
+  padding: 4px;
+  margin-bottom: 12px;
+}
+
+.segmented-control button {
+  padding: 10px 4px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.segmented-control button:nth-child(4) {
+  grid-column: 1 / 3; 
+}
+.segmented-control button:nth-child(5) {
+  grid-column: 3 / 4;
+}
+
+.segmented-control button.active-waiting { background: var(--waiting-bg); color: var(--waiting); }
+.segmented-control button.active-boarding { background: var(--boarding-bg); color: var(--boarding); }
+.segmented-control button.active-full { background: var(--full-bg); color: var(--full); }
+.segmented-control button.active-departed { background: var(--departed-bg); color: var(--departed); }
+.segmented-control button.active-overdue { background: #FEE2E2; color: #B91C1C; }
+
+/* Departure Dialog */
+.departure-dialog {
+  background: #fff3cd;
+  border: 1px solid #ffeeba;
+  padding: 15px;
+  border-radius: 12px;
+  margin-top: 15px;
+}
+
+.dialog-options {
+  display: flex;
+  gap: 15px;
+  margin: 10px 0;
+}
+
+.dialog-options label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+/* Action Bar */
 .action-bar {
   display: flex;
   gap: 10px;
   margin-bottom: 20px;
 }
 
-.action-bar button { flex: 1; padding: 12px; border-radius: 8px; font-size: 16px; }
-
-.trip-card {
-  border: 1px solid #ccc;
-  padding: 15px;
-  margin-bottom: 15px;
-  border-radius: 8px;
-  background-color: #fff;
+.action-bar button {
+  flex: 1;
+  padding: 14px;
+  border-radius: 12px;
+  font-size: 0.95rem;
+  font-weight: 700;
 }
 
-.trip-header {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 10px;
+/* Form Container */
+.form-container {
+  background: var(--surface);
+  padding: 20px;
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  margin-bottom: 20px;
+  border: 1px solid var(--line);
 }
 
-.trip-actions {
-  display: flex;
-  gap: 10px;
-  margin-top: 10px;
-  flex-wrap: wrap;
-}
-
-.departure-dialog {
-  margin-top: 15px;
-  padding: 15px;
-  background-color: #fff3cd;
-  border-radius: 8px;
-  border: 1px solid #ffeeba;
-}
-
-.dialog-options {
-  display: flex;
-  gap: 15px;
-  margin-bottom: 10px;
+.form-container label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--muted);
+  margin-bottom: 4px;
+  display: block;
 }
