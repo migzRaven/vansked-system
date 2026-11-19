@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from './firebase';
@@ -46,24 +46,14 @@ const CloseIcon = () => (
   </svg>
 );
 
-const BusIcon = () => (
-  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-1.1 0-2 .9-2 2v7c0 .6.4 1 1 1h2"></path>
-    <circle cx="7" cy="17" r="2"></circle>
-    <path d="M9 17h6"></path>
-    <circle cx="17" cy="17" r="2"></circle>
+// Formal SVG Chevron
+const ChevronRight = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="9 18 15 12 9 6"></polyline>
   </svg>
 );
 
-const DashboardIcon = () => (
-  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-    <line x1="3" y1="9" x2="21" y2="9"></line>
-    <line x1="9" y1="21" x2="9" y2="9"></line>
-  </svg>
-);
-
-// --- FLOATING TOGGLE COMPONENT (Telegram Style) ---
+// --- FLOATING TOGGLE COMPONENT (Smart Rectangle) ---
 const FloatingToggle = () => {
   const { currentUser } = useAuth();
   const location = useLocation();
@@ -72,107 +62,54 @@ const FloatingToggle = () => {
   const isDispatcherPage = location.pathname === '/dispatcher';
   const isPassengerPage = location.pathname === '/';
   
-  const [position, setPosition] = useState({ x: window.innerWidth - 30, y: window.innerHeight - 150 });
-  const [isSnapped, setIsSnapped] = useState(false);
-  
-  const dragStart = useRef({ x: 0, y: 0 });
-  const fabStart = useRef({ x: 0, y: 0 });
-  const hasMoved = useRef(false);
-  const idleTimer = useRef(null);
-
-  const FAB_SIZE = 56; // 56px width/height
-
-  const snapToEdge = (currentX) => {
-    const screenWidth = window.innerWidth;
-    const isLeft = currentX < screenWidth / 2;
-    
-    // Telegram style: half hidden off the edge
-    const targetX = isLeft ? -(FAB_SIZE / 2) + 8 : screenWidth - (FAB_SIZE / 2) - 8;
-    
-    setPosition(prev => ({ ...prev, x: targetX }));
-    setIsSnapped(true);
-  };
-
-  const startIdleTimer = () => {
-    if (idleTimer.current) clearTimeout(idleTimer.current);
-    idleTimer.current = setTimeout(() => {
-      snapToEdge(position.x);
-    }, 3000);
-  };
-
-  const handlePointerDown = (e) => {
-    e.target.setPointerCapture(e.pointerId);
-    dragStart.current = { x: e.clientX, y: e.clientY };
-    fabStart.current = { x: position.x, y: position.y };
-    hasMoved.current = false;
-    setIsSnapped(false); // Expand it when they touch it
-    if (idleTimer.current) clearTimeout(idleTimer.current);
-  };
-
-  const handlePointerMove = (e) => {
-    if (!e.target.hasPointerCapture(e.pointerId)) return;
-    
-    const deltaX = e.clientX - dragStart.current.x;
-    const deltaY = e.clientY - dragStart.current.y;
-    
-    // Check if moved more than 5 pixels (drag threshold)
-    if (Math.abs(deltaX) > 5 || Math.abs(deltaY) > 5) {
-      hasMoved.current = true;
-    }
-
-    if (hasMoved.current) {
-      let newX = fabStart.current.x + deltaX;
-      let newY = fabStart.current.y + deltaY;
-
-      // Keep within screen bounds vertically
-      newY = Math.max(70, Math.min(newY, window.innerHeight - 100));
-      
-      // Allow dragging slightly off-screen horizontally for the snap effect
-      newX = Math.max(-(FAB_SIZE/2), Math.min(newX, window.innerWidth - (FAB_SIZE/2)));
-
-      setPosition({ x: newX, y: newY });
-    }
-  };
-
-  const handlePointerUp = (e) => {
-    e.target.releasePointerCapture(e.pointerId);
-    
-    if (hasMoved.current) {
-      // It was a drag, snap to edge
-      snapToEdge(position.x);
-    } else {
-      // It was a tap/click
-      if (isSnapped) {
-        // If it was snapped and tapped, expand it and start timer
-        setIsSnapped(false);
-        startIdleTimer();
-      } else {
-        // If it was expanded and tapped, navigate!
-        navigate(isPassengerPage ? '/dispatcher' : '/');
-      }
-    }
-  };
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   useEffect(() => {
-    startIdleTimer();
+    // Use touch and mouse events to avoid scroll-cancellation bugs
+    const handlePressStart = (e) => {
+      // If the touch/click is NOT on the button itself, collapse it
+      if (e.target && !e.target.closest('.fab-rectangle')) {
+        setIsCollapsed(true);
+      }
+    };
+
+    const handlePressEnd = () => {
+      // When finger/mouse lifts, expand it
+      setIsCollapsed(false);
+    };
+
+    // Mobile Events
+    window.addEventListener('touchstart', handlePressStart, { passive: true });
+    window.addEventListener('touchend', handlePressEnd);
+    
+    // Desktop Events
+    window.addEventListener('mousedown', handlePressStart);
+    window.addEventListener('mouseup', handlePressEnd);
+
     return () => {
-      if (idleTimer.current) clearTimeout(idleTimer.current);
+      window.removeEventListener('touchstart', handlePressStart);
+      window.removeEventListener('touchend', handlePressEnd);
+      window.removeEventListener('mousedown', handlePressStart);
+      window.removeEventListener('mouseup', handlePressEnd);
     };
   }, []);
 
   if (!currentUser || (!isDispatcherPage && !isPassengerPage)) return null;
 
+  const isPassengerView = isPassengerPage;
+  const buttonText = isPassengerView ? 'Dispatcher' : 'Passenger';
+  
+  // SPOTC Green for Dispatcher, Blue for Passenger
+  const btnClass = isPassengerView ? 'btn-go-dispatcher' : 'btn-go-passenger';
+  const destination = isPassengerView ? '/dispatcher' : '/';
+
   return (
-    <div
-      className={`fab-toggle ${isSnapped ? 'snapped' : ''}`}
-      style={{ left: `${position.x}px`, top: `${position.y}px` }}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
+    <div 
+      className={`fab-rectangle ${btnClass} ${isCollapsed ? 'collapsed' : ''}`}
+      onClick={() => navigate(destination)}
     >
-      <div className="fab-icon">
-        {isPassengerPage ? <DashboardIcon /> : <BusIcon />}
-      </div>
+      <span className="fab-text">{buttonText}</span>
+      <span className="fab-arrow"><ChevronRight /></span>
     </div>
   );
 };
