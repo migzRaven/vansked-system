@@ -148,3 +148,81 @@
   margin-bottom: 4px;
   display: block;
 }
+
+/* Toggle Switch Container */
+.toggle-container {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* The Toggle Switch Track (Minimal Size) */
+.toggle-switch {
+  position: relative;
+  width: 54px;       /* Reduced from 64px */
+  height: 20px;      /* Reduced from 24px */
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);
+  box-sizing: border-box;
+}
+
+.toggle-switch.auto {
+  background-color: #22c55e; /* Friendly Green */
+}
+
+.toggle-switch.manual {
+  background-color: #f59e0b; /* Friendly Orange/Yellow */
+}
+
+/* The Knob (Tiny) */
+.toggle-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;         
+  width: 16px;       /* Reduced from 20px */
+  height: 16px;
+  background-color: white;
+  border-radius: 50%; 
+  box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+  transition: transform 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+  z-index: 2;        
+}
+
+/* Switch States */
+.toggle-switch.auto .toggle-knob {
+  transform: translateX(34px); /* Recalculated for 54px width */
+}
+
+.toggle-switch.manual .toggle-knob {
+  transform: translateX(0);    
+}
+
+/* The Text inside the switch */
+.toggle-switch-text {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 6px;    /* Ultra small text */
+  font-weight: 800;
+  color: white;
+  pointer-events: none;
+  letter-spacing: 0.3px;
+  line-height: 1;
+  z-index: 1;        
+}
+
+.toggle-switch.auto .toggle-switch-text {
+  left: 6px;        
+}
+
+.toggle-switch.manual .toggle-switch-text {
+  right: 5px;       
+}

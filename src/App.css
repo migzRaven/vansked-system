@@ -35,16 +35,22 @@ body {
   font-size: 14px;
 }
 
-/* Navigation */
+/* --- NAVIGATION BAR --- */
 .nav-bar {
-  text-align: center;
-  padding: 15px;
-  background-color: var(--navy-900); /* Changed to navy */
   display: flex;
-  justify-content: center;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 20px;
+  background-color: var(--navy-900, #0B1B2B);
+  border-bottom: 2px solid var(--amber, #FFB703);
+  flex-wrap: nowrap;
+  gap: 10px;
+}
+
+.nav-left, .nav-right {
+  display: flex;
+  align-items: center;
   gap: 15px;
-  flex-wrap: wrap;
-  border-bottom: 2px solid var(--amber); /* Added amber accent */
 }
 
 .nav-link {
@@ -54,17 +60,180 @@ body {
   font-size: 14px;
 }
 
-.nav-link:hover { text-decoration: underline; }
-.nav-btn-logout {
-  background: transparent;
-  border: none;
-  color: #ffc107;
-  cursor: pointer;
-  text-decoration: underline;
-  font-size: 16px;
+.nav-link:hover {
+  color: var(--amber, #FFB703);
 }
 
-/* Forms & Inputs */
+/* Toggle Button (Passenger/Dispatcher) */
+.nav-toggle-btn {
+  color: var(--amber, #FFB703);
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 13px;
+  border: 1px solid var(--amber, #FFB703);
+  padding: 6px 12px;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.nav-toggle-btn:hover {
+  background-color: var(--amber, #FFB703);
+  color: var(--navy-900, #0B1B2B);
+}
+
+/* Share/Back Icon Link */
+.nav-icon-link {
+  display: flex;
+  align-items: center;
+  color: white;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 14px;
+  background-color: rgba(255, 255, 255, 0.1);
+  padding: 6px 12px;
+  border-radius: 20px;
+  transition: background-color 0.2s;
+}
+
+.nav-icon-link:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Staff Login Link */
+.nav-link-login {
+  color: var(--amber, #FFB703);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+/* Logout Button */
+.nav-btn-logout {
+  background: transparent;
+  border: 1px solid #ffc107;
+  color: #ffc107;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: bold;
+  transition: all 0.2s;
+}
+
+.nav-btn-logout:hover {
+  background: #ffc107;
+  color: #000;
+}
+
+/* --- RESPONSIVE DESIGN (Hamburger Menu) --- */
+.hamburger-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: none; /* Hidden on desktop */
+  padding: 4px;
+}
+
+.desktop-links {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+/* Hide desktop links and show hamburger on mobile */
+@media (max-width: 768px) {
+  .desktop-links {
+    display: none;
+  }
+  .hamburger-btn {
+    display: block;
+  }
+}
+
+/* --- SLIDING SIDE DRAWER --- */
+.drawer-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.drawer-overlay.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.side-drawer {
+  position: fixed;
+  top: 0;
+  right: -280px; /* Hide off-screen to the right */
+  width: 250px;
+  height: 100vh;
+  background-color: var(--navy-900, #0B1B2B);
+  z-index: 1001;
+  box-shadow: -4px 0 15px rgba(0,0,0,0.2);
+  transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+}
+
+.side-drawer.open {
+  right: 0;
+}
+
+.drawer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.close-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.drawer-links {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.drawer-link {
+  color: white;
+  text-decoration: none;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.drawer-link:hover {
+  color: var(--amber, #FFB703);
+}
+
+.drawer-logout {
+  margin-top: auto; /* Pushes logout to the bottom */
+  background-color: var(--amber, #FFB703);
+  color: var(--navy-900, #0B1B2B);
+  border: none;
+  padding: 12px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+/* General Buttons & Forms */
 .form-container {
   background-color: #e9ecef;
   padding: 15px;
@@ -85,7 +254,6 @@ body {
   font-size: 14px;
 }
 
-/* Buttons */
 .btn {
   padding: 10px 15px;
   border: none;
@@ -102,3 +270,131 @@ body {
 .btn-warning { background-color: #ffc107; color: black; }
 .btn-secondary { background-color: #6c757d; color: white; }
 .btn-outline { background: transparent; border: none; color: red; cursor: pointer; font-weight: bold; }
+
+/* --- FLOATING TOGGLE BUTTON (FAB) --- */
+.fab-toggle {
+  position: fixed;
+  width: 75px;
+  height: 75px;
+  background-color: var(--amber, #FFB703);
+  color: var(--navy-900, #0B1B2B);
+  border-radius: 50px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-decoration: none;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+  z-index: 1000;
+  border: 3px solid var(--navy-900, #0B1B2B);
+  
+  /* Crucial for smooth snapping */
+  transition: width 0.3s ease, height 0.3s ease, border-radius 0.3s ease, background-color 0.3s ease;
+  
+  /* Prevent browser scrolling while dragging */
+  touch-action: none; 
+  user-select: none;
+  cursor: grab;
+}
+
+.fab-toggle.dragging {
+  transition: none;
+  cursor: grabbing;
+  transform: scale(1.05); /* Slight pop effect when held */
+}
+
+.fab-toggle.snapped {
+  width: 50px;
+  height: 50px;
+  opacity: 0.8;
+}
+
+.fab-toggle.snapped:hover {
+  opacity: 1;
+}
+
+.fab-toggle:active {
+  transform: scale(0.92); /* Squish effect when tapped */
+}
+
+.fab-icon {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  pointer-events: none; /* Let clicks pass to parent */
+}
+
+.fab-text {
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  pointer-events: none;
+  margin-top: 2px;
+}
+
+/* Hide text when snapped */
+.fab-toggle.snapped .fab-text {
+  display: none;
+}
+
+/* Ensure the pages have enough padding at the bottom */
+.app-container, .passenger-list {
+  padding-bottom: 120px !important;
+}
+
+/* Ensure the pages have enough padding at the bottom so the FAB doesn't hide content */
+.app-container, .passenger-list {
+  padding-bottom: 120px !important;
+}
+
+/* --- FLOATING BUTTON --- */
+.fab-toggle {
+  position: fixed;
+  width: 56px;
+  height: 56px;
+  background-color: #0088cc; /* Telegram Blue (You can change to var(--amber) if you want yellow) */
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+  z-index: 1000;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  
+  /* Smooth snapping */
+  transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), left 0.3s ease, top 0.3s ease;
+  
+  touch-action: none; 
+  user-select: none;
+  cursor: grab;
+}
+
+.fab-toggle:active {
+  cursor: grabbing;
+  transform: scale(1.1); /* Slight pop when held */
+}
+
+/* When snapped and minimized */
+.fab-toggle.snapped {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  border-radius: 50%;
+}
+
+.fab-icon {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  pointer-events: none;
+}
+
+/* Ensure pages have enough padding at the bottom */
+.app-container, .passenger-list {
+  padding-bottom: 120px !important;
+}
+
+/* Optional: Hide horizontal scrollbar caused by the half-off-screen button */
+body {
+  overflow-x: hidden;
+}

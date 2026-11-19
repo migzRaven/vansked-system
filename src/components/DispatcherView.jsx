@@ -27,8 +27,9 @@ const DispatcherTripCard = ({ schedule, handleDelete, handleStatusChange }) => {
   const [isFull, setIsFull] = useState(true);
   const [vacantSeats, setVacantSeats] = useState(0);
   
+  // Silent Timer States
   const [isAuto, setIsAuto] = useState(true);
-  const [timeLeft, setTimeLeft] = useState(300); 
+  const [timeLeft, setTimeLeft] = useState(300); // 5 minutes in seconds
 
   useEffect(() => {
     let timer;
@@ -37,6 +38,7 @@ const DispatcherTripCard = ({ schedule, handleDelete, handleStatusChange }) => {
         setTimeLeft((prev) => prev - 1);
       }, 1000);
     } else if (schedule.status === 'Full' && isAuto && timeLeft === 0 && !isDeparting) {
+      // Time's up! Auto-trigger departure silently
       confirmDeparture(true);
     }
     return () => clearInterval(timer);
@@ -49,6 +51,13 @@ const DispatcherTripCard = ({ schedule, handleDelete, handleStatusChange }) => {
       setIsDeparting(false);
     }
   }, [schedule.status]);
+
+  const handleToggleAuto = () => {
+    if (!isAuto) {
+      setTimeLeft(300); // Reset to 5 mins if turning back to auto
+    }
+    setIsAuto(!isAuto);
+  };
 
   const confirmDeparture = async (auto = false) => {
     try {
@@ -65,12 +74,6 @@ const DispatcherTripCard = ({ schedule, handleDelete, handleStatusChange }) => {
     } catch (error) { alert("Error updating status: " + error.message); }
   };
 
-  const formatTimer = (seconds) => {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m}:${s < 10 ? '0' : ''}${s}`;
-  };
-
   return (
     <div className="trip-card">
       <div className="trip-header">
@@ -81,6 +84,16 @@ const DispatcherTripCard = ({ schedule, handleDelete, handleStatusChange }) => {
         <button onClick={() => handleDelete(schedule.id)} className="btn-outline">✕</button>
       </div>
       
+      {/* AUTO-DEPART TOGGLE (Only visible when Full) */}
+      {schedule.status === 'Full' && (
+        <div className="toggle-container">
+          <div className={`toggle-switch ${isAuto ? 'auto' : 'manual'}`} onClick={handleToggleAuto}>
+            <span className="toggle-switch-text">{isAuto ? 'AUTO' : 'MANUAL'}</span>
+            <div className="toggle-knob"></div>
+          </div>
+        </div>
+      )}
+
       <div className="segmented-control">
         <button className={schedule.status === 'Waiting' ? 'active-waiting' : ''} onClick={() => handleStatusChange(schedule.id, 'Waiting')}>Waiting</button>
         <button className={schedule.status === 'Boarding' ? 'active-boarding' : ''} onClick={() => handleStatusChange(schedule.id, 'Boarding')}>Boarding</button>
@@ -88,23 +101,6 @@ const DispatcherTripCard = ({ schedule, handleDelete, handleStatusChange }) => {
         <button className={schedule.status === 'Departed' ? 'active-departed' : ''} onClick={() => setIsDeparting(true)}>Depart</button>
         <button className={schedule.status === 'Overdue' ? 'active-overdue' : ''} onClick={() => handleStatusChange(schedule.id, 'Overdue')}>Overdue</button>
       </div>
-
-      {schedule.status === 'Full' && (
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--full-bg)', padding: '10px', borderRadius: '8px', marginTop: '10px' }}>
-          <div style={{ color: 'var(--full)', fontWeight: 'bold' }}>
-            {isAuto ? `Auto-Departing in ${formatTimer(timeLeft)}` : 'Manual Departure'}
-          </div>
-          <button 
-            onClick={() => setIsAuto(!isAuto)} 
-            style={{ 
-              padding: '6px 12px', borderRadius: '20px', border: 'none', fontWeight: 'bold', cursor: 'pointer',
-              backgroundColor: isAuto ? 'var(--full)' : '#fff', color: isAuto ? '#fff' : 'var(--full)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-            }}
-          >
-            {isAuto ? 'AUTO ⏱️' : 'MANUAL ✋'}
-          </button>
-        </div>
-      )}
 
       {schedule.status === 'Departed' && (
         <p style={{ fontSize: '0.85rem', color: 'var(--muted)', marginTop: '8px' }}>Departed with {schedule.vacantSeats || 0} vacant seat(s).</p>
@@ -264,7 +260,6 @@ const DispatcherView = ({ schedules }) => {
       const depTimestamp = getTimestampForToday(newTrip.time24);
       const depTimeMs = depTimestamp.toDate().getTime();
       
-      // Auto-detect if the manually added trip is already in the past
       let initialStatus = 'Waiting';
       if (new Date().getTime() > depTimeMs + 1800000) {
         initialStatus = 'Overdue'; 
@@ -282,26 +277,20 @@ const DispatcherView = ({ schedules }) => {
     } catch (error) { alert("Error saving trip: " + error.message); }
   };
 
-  // --- NEW SMART SORTING LOGIC ---
   const sortedSchedules = [...schedules].sort((a, b) => {
     const now = new Date().getTime();
-    
-    // 1. Departed goes to the bottom always
     if (a.status === 'Departed' && b.status !== 'Departed') return 1;
     if (a.status !== 'Departed' && b.status === 'Departed') return -1;
 
-    // 2. Check if past/overdue
     const aTime = a.departureAt ? a.departureAt.toMillis() : 0;
     const bTime = b.departureAt ? b.departureAt.toMillis() : 0;
     
     const aIsPast = (now > aTime + 1800000) || a.status === 'Overdue';
     const bIsPast = (now > bTime + 1800000) || b.status === 'Overdue';
 
-    // 3. Past/Overdue goes above Departed but below upcoming
     if (aIsPast && !bIsPast) return 1;
     if (!aIsPast && bIsPast) return -1;
 
-    // 4. Sort by time ascending (earliest first)
     return aTime - bTime;
   });
 
