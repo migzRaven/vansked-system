@@ -46,43 +46,30 @@ const CloseIcon = () => (
   </svg>
 );
 
-// Formal SVG Chevron
 const ChevronRight = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
     <polyline points="9 18 15 12 9 6"></polyline>
   </svg>
 );
 
-// --- FLOATING TOGGLE COMPONENT (Smart Rectangle) ---
+// --- SMART FLOATING TOGGLE ---
 const FloatingToggle = () => {
   const { currentUser } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   
-  const isDispatcherPage = location.pathname === '/dispatcher';
-  const isPassengerPage = location.pathname === '/';
-  
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   useEffect(() => {
-    // Use touch and mouse events to avoid scroll-cancellation bugs
     const handlePressStart = (e) => {
-      // If the touch/click is NOT on the button itself, collapse it
       if (e.target && !e.target.closest('.fab-rectangle')) {
         setIsCollapsed(true);
       }
     };
+    const handlePressEnd = () => setIsCollapsed(false);
 
-    const handlePressEnd = () => {
-      // When finger/mouse lifts, expand it
-      setIsCollapsed(false);
-    };
-
-    // Mobile Events
     window.addEventListener('touchstart', handlePressStart, { passive: true });
     window.addEventListener('touchend', handlePressEnd);
-    
-    // Desktop Events
     window.addEventListener('mousedown', handlePressStart);
     window.addEventListener('mouseup', handlePressEnd);
 
@@ -94,14 +81,30 @@ const FloatingToggle = () => {
     };
   }, []);
 
-  if (!currentUser || (!isDispatcherPage && !isPassengerPage)) return null;
+  // Show on all staff pages, hide on login/public pages
+  if (!currentUser || location.pathname === '/login' || location.pathname === '/qr') return null;
 
-  const isPassengerView = isPassengerPage;
-  const buttonText = isPassengerView ? 'Dispatcher' : 'Passenger';
+  const isPassengerView = location.pathname === '/';
+  const isDispatcherView = location.pathname === '/dispatcher';
   
-  // SPOTC Green for Dispatcher, Blue for Passenger
-  const btnClass = isPassengerView ? 'btn-go-dispatcher' : 'btn-go-passenger';
-  const destination = isPassengerView ? '/dispatcher' : '/';
+  let buttonText = 'Dashboard';
+  let btnClass = 'btn-go-dispatcher'; // Default Green
+  let destination = '/dispatcher';
+
+  if (isPassengerView) {
+    buttonText = 'Dispatcher';
+    btnClass = 'btn-go-dispatcher'; 
+    destination = '/dispatcher';
+  } else if (isDispatcherView) {
+    buttonText = 'Passenger';
+    btnClass = 'btn-go-passenger'; 
+    destination = '/';
+  } else {
+    // If on Analytics, Templates, or Fleet
+    buttonText = 'Dashboard';
+    btnClass = 'btn-go-dispatcher'; 
+    destination = '/dispatcher';
+  }
 
   return (
     <div 
@@ -180,7 +183,9 @@ const Navigation = () => {
               <Link to="/templates" className="drawer-link">Templates</Link>
               <Link to="/fleet" className="drawer-link">Fleet</Link>
             </div>
-            <button onClick={logout} className="drawer-logout">Logout</button>
+            <div className="drawer-footer">
+              <button onClick={logout} className="drawer-logout">Logout</button>
+            </div>
           </div>
         </>
       )}
@@ -225,7 +230,7 @@ const AppContent = () => {
         <Route path="/dispatcher" element={<ProtectedRoute><DispatcherView schedules={schedules} /></ProtectedRoute>} />
         <Route path="/analytics" element={<ProtectedRoute><AnalyticsView /></ProtectedRoute>} />
         <Route path="/templates" element={<ProtectedRoute><TemplateManager /></ProtectedRoute>} />
-        <Route path="/fleet" element={<ProtectedRoute><FleetManager /></ProtectedRoute>} />
+        <Route path="/fleet" className="drawer-link" element={<ProtectedRoute><FleetManager /></ProtectedRoute>} />
       </Routes>
     </BrowserRouter>
   );
