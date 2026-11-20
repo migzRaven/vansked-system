@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { doc, updateDoc, addDoc, deleteDoc, collection, getDocs, onSnapshot, writeBatch, Timestamp, setDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import './DispatcherView.css';
+import toast from 'react-hot-toast';
 
 const formatTimeDisplay = (time24) => {
   if (!time24) return '';
@@ -78,7 +79,7 @@ const DispatcherTripCard = ({ schedule, handleDelete, handleStatusChange }) => {
       await batch.commit(); // Commit both at exactly the same time
       setIsDeparting(false);
       setVacantSeats(1);
-    } catch (error) { alert("Error updating status: " + error.message); }
+    } catch (error) { toast.error("Error updating status."); }
   };
 
   return (
@@ -208,7 +209,7 @@ const DispatcherView = ({ schedules }) => {
 
       setAvailableTemplates(activeGroups);
       setIsModalOpen(true);
-    } catch (error) { alert("Error fetching templates: " + error.message); }
+    } catch (error) { toast.error("Error fetching templates: " + error.message); }
   };
 
   const generateSpecificTemplate = async (groupId) => {
@@ -252,9 +253,9 @@ const DispatcherView = ({ schedules }) => {
       }
       
       await batch.commit();
-      alert(`Successfully generated ${addedCount} new trips.`);
+      toast.success(`Generated ${addedCount} new trips.`);
       setIsModalOpen(false);
-    } catch (error) { alert("Error generating board: " + error.message); }
+    } catch (error) { toast.error("Error generating board: " + error.message); }
     setIsGenerating(false);
   };
 
@@ -281,14 +282,14 @@ const DispatcherView = ({ schedules }) => {
       });
 
       await batch.commit();
-    } catch (error) { alert("Error: " + error.message); }
+    } catch (error) { toast.error("Action failed."); }
   };
 
   const handleSaveDefaultFare = async () => {
     try {
       await setDoc(doc(db, "fares", newTrip.destination), { amount: newTrip.fare });
-      alert(`Default fare for ${newTrip.destination} updated to ₱${newTrip.fare}`);
-    } catch (error) { alert("Error saving fare: " + error.message); }
+      toast.success("Fare updated successfully.");
+    } catch (error) { toast.error("Error saving fare: " + error.message); }
   };
 
   const handleDelete = async (id) => {
@@ -319,7 +320,7 @@ const DispatcherView = ({ schedules }) => {
       
       setNewTrip({ time24: '', destination: 'Tacloban', driver: '', plateNumber: '', phone: '', fare: '', status: 'Waiting' });
       setIsFormOpen(false);
-    } catch (error) { alert("Error saving trip: " + error.message); }
+    } catch (error) { toast.error("Error saving trip: " + error.message); }
   };
 
   const sortedSchedules = [...schedules].sort((a, b) => {

@@ -4,8 +4,8 @@ import { QRCodeSVG } from 'qrcode.react';
 const QRCodeView = () => {
   // For the demo, the QR code links to the local Passenger View.
   // When you deploy this to the internet later, you just change this URL to your live domain.
-  //const passengerUrl = window.location.origin;
-  const passengerUrl = "http://192.168.100.10:5173/";
+  const passengerUrl = window.location.origin;
+  //const passengerUrl = "http://192.168.100.10:5173/";
  
 
   return (

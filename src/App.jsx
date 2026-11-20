@@ -1,45 +1,40 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { Toaster } from 'react-hot-toast'; // NEW: Toast notifications
 import { db } from './firebase';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 
-import PassengerView from './components/PassengerView';
-import DispatcherView from './components/DispatcherView';
-import TemplateManager from './components/TemplateManager';
-import FleetManager from './components/FleetManager';
-import AnalyticsView from './components/AnalyticsView';
-import QRCodeView from './components/QRCodeView';
-import Login from './components/Login';
+// Lazy Loading: Only downloads code when the user visits the page
+const PassengerView = lazy(() => import('./components/PassengerView'));
+const DispatcherView = lazy(() => import('./components/DispatcherView'));
+const TemplateManager = lazy(() => import('./components/TemplateManager'));
+const FleetManager = lazy(() => import('./components/FleetManager'));
+const AnalyticsView = lazy(() => import('./components/AnalyticsView'));
+const QRCodeView = lazy(() => import('./components/QRCodeView'));
+const Login = lazy(() => import('./components/Login'));
 import './App.css';
 
-// --- ICONS ---
+// --- ICONS --- (Keep all your existing icons here)
 const QrIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}>
-    <rect x="3" y="3" width="7" height="7"></rect>
-    <rect x="14" y="3" width="7" height="7"></rect>
-    <rect x="14" y="14" width="7" height="7"></rect>
-    <rect x="3" y="14" width="7" height="7"></rect>
+    <rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect>
   </svg>
 );
 const BackIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}>
-    <line x1="19" y1="12" x2="5" y2="12"></line>
-    <polyline points="12 19 5 12 12 5"></polyline>
+    <line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline>
   </svg>
 );
 const HamburgerIcon = () => (
   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <line x1="3" y1="12" x2="21" y2="12"></line>
-    <line x1="3" y1="6" x2="21" y2="6"></line>
-    <line x1="3" y1="18" x2="21" y2="18"></line>
+    <line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line>
   </svg>
 );
 const CloseIcon = () => (
   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <line x1="18" y1="6" x2="6" y2="18"></line>
-    <line x1="6" y1="6" x2="18" y2="18"></line>
+    <line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>
   </svg>
 );
 const ChevronRight = () => (
@@ -80,25 +75,24 @@ const FloatingToggle = () => {
   let btnClass = 'btn-go-dispatcher';
   let destination = '/dispatcher';
 
-  if (isPassengerView) {
-    buttonText = 'Dispatcher';
-    btnClass = 'btn-go-dispatcher'; 
-    destination = '/dispatcher';
-  } else if (isDispatcherView) {
-    buttonText = 'Passenger';
-    btnClass = 'btn-go-passenger'; 
-    destination = '/';
-  }
+  if (isPassengerView) { buttonText = 'Dispatcher'; destination = '/dispatcher'; }
+  else if (isDispatcherView) { buttonText = 'Passenger'; btnClass = 'btn-go-passenger'; destination = '/'; }
 
   return (
-    <div className={`fab-rectangle ${btnClass} ${isCollapsed ? 'collapsed' : ''}`} onClick={() => navigate(destination)}>
+    // Changed from <div> to <button> for accessibility
+    <button 
+      className={`fab-rectangle ${btnClass} ${isCollapsed ? 'collapsed' : ''}`} 
+      onClick={() => navigate(destination)}
+      aria-label={`Switch to ${buttonText} view`}
+    >
       <span className="fab-text">{buttonText}</span>
       <span className="fab-arrow"><ChevronRight /></span>
-    </div>
+    </button>
   );
 };
 
 const Navigation = () => {
+  // ... (Keep your exact existing Navigation code here. No changes needed inside)
   const { currentUser, logout } = useAuth();
   const location = useLocation();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -173,13 +167,8 @@ const AppContent = () => {
   const [schedules, setSchedules] = useState([]);
   const [fleet, setFleet] = useState([]);
   const [fares, setFares] = useState({});
-  
-  // Phase 2: Midnight Rollover State
-  const [todayStr, setTodayStr] = useState(() => {
-    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
-  });
+  const [todayStr, setTodayStr] = useState(() => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()));
 
-  // Phase 2: Midnight Rollover Checker (Runs every minute)
   useEffect(() => {
     const interval = setInterval(() => {
       const currentDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
@@ -188,7 +177,6 @@ const AppContent = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Phase 2: Unified Fleet and Fares Subscriptions
   useEffect(() => {
     const unsubFleet = onSnapshot(collection(db, "fleet"), (snap) => {
       setFleet(snap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -200,7 +188,6 @@ const AppContent = () => {
     return () => { unsubFleet(); unsubFares(); };
   }, []);
 
-  // Trips Subscription using todayStr
   useEffect(() => {
     const q = query(collection(db, "trips"), where("date", "==", todayStr));
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -218,18 +205,27 @@ const AppContent = () => {
 
   return (
     <BrowserRouter>
+      <Toaster position="top-center" /> {/* Added Toast Notifications */}
       <Navigation />
       <FloatingToggle />
-      <Routes>
-        <Route path="/" element={<PassengerView schedules={schedules} />} />
-        <Route path="/qr" element={<QRCodeView />} />
-        <Route path="/login" element={<Login />} />
-        
-        <Route path="/dispatcher" element={<ProtectedRoute><DispatcherView schedules={schedules} fleet={fleet} fares={fares} /></ProtectedRoute>} />
-        <Route path="/analytics" element={<ProtectedRoute><AnalyticsView /></ProtectedRoute>} />
-        <Route path="/templates" element={<ProtectedRoute><TemplateManager fleet={fleet} fares={fares} /></ProtectedRoute>} />
-        <Route path="/fleet" element={<ProtectedRoute><FleetManager /></ProtectedRoute>} />
-      </Routes>
+      
+      {/* Suspense handles the Lazy Loading fallback */}
+      <Suspense fallback={
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh', color: 'var(--muted)', fontSize: '18px' }}>
+          Loading VanSked...
+        </div>
+      }>
+        <Routes>
+          <Route path="/" element={<PassengerView schedules={schedules} />} />
+          <Route path="/qr" element={<QRCodeView />} />
+          <Route path="/login" element={<Login />} />
+          
+          <Route path="/dispatcher" element={<ProtectedRoute><DispatcherView schedules={schedules} fleet={fleet} fares={fares} /></ProtectedRoute>} />
+          <Route path="/analytics" element={<ProtectedRoute><AnalyticsView /></ProtectedRoute>} />
+          <Route path="/templates" element={<ProtectedRoute><TemplateManager fleet={fleet} fares={fares} /></ProtectedRoute>} />
+          <Route path="/fleet" element={<ProtectedRoute><FleetManager /></ProtectedRoute>} />
+        </Routes>
+      </Suspense>
     </BrowserRouter>
   );
 };
