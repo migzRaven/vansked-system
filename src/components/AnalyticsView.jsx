@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, onSnapshot, query, where, orderBy } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, orderBy, limit } from 'firebase/firestore';
 import { db } from '../firebase';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import './AnalyticsView.css';
@@ -21,10 +21,11 @@ const AnalyticsView = () => {
     });
 
     // 2. Listen to the last 50 events
-    const qEvents = query(collection(db, "trip_events"), orderBy("timestamp", "desc"));
+    const qEvents = query(collection(db, "trip_events"), orderBy("timestamp", "desc"), limit(50));
     const unsubEvents = onSnapshot(qEvents, (snap) => {
       setEvents(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       setLoading(false);
+      
     });
 
     return () => { unsubTrips(); unsubEvents(); };

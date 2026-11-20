@@ -25,11 +25,12 @@ const DESTINATIONS = ['Tacloban', 'Sogod', 'Bato'];
 const DispatcherTripCard = ({ schedule, handleDelete, handleStatusChange }) => {
   const [isDeparting, setIsDeparting] = useState(false);
   const [isFull, setIsFull] = useState(true);
-  const [vacantSeats, setVacantSeats] = useState(0);
   
-  // Silent Timer States
+  // Default to 1 to avoid zero-vacancy confusion
+  const [vacantSeats, setVacantSeats] = useState(1); 
+  
   const [isAuto, setIsAuto] = useState(true);
-  const [timeLeft, setTimeLeft] = useState(300); // 5 minutes in seconds
+  const [timeLeft, setTimeLeft] = useState(300); 
 
   useEffect(() => {
     let timer;
@@ -38,7 +39,6 @@ const DispatcherTripCard = ({ schedule, handleDelete, handleStatusChange }) => {
         setTimeLeft((prev) => prev - 1);
       }, 1000);
     } else if (schedule.status === 'Full' && isAuto && timeLeft === 0 && !isDeparting) {
-      // Time's up! Auto-trigger departure silently
       confirmDeparture(true);
     }
     return () => clearInterval(timer);
@@ -54,23 +54,30 @@ const DispatcherTripCard = ({ schedule, handleDelete, handleStatusChange }) => {
 
   const handleToggleAuto = () => {
     if (!isAuto) {
-      setTimeLeft(300); // Reset to 5 mins if turning back to auto
+      setTimeLeft(300); 
     }
     setIsAuto(!isAuto);
   };
 
-  const confirmDeparture = async (auto = false) => {
+    const confirmDeparture = async (auto = false) => {
     try {
       const finalVacant = auto ? 0 : (isFull ? 0 : parseInt(vacantSeats) || 0);
       
-      await updateDoc(doc(db, "trips", schedule.id), { status: 'Departed', vacantSeats: finalVacant });
+      // Use a batch for atomic write
+      const batch = writeBatch(db);
+      const tripRef = doc(db, "trips", schedule.id);
+      const eventRef = doc(collection(db, "trip_events")); // Create empty reference for new ID
 
-      await addDoc(collection(db, "trip_events"), {
+      batch.update(tripRef, { status: 'Departed', vacantSeats: finalVacant });
+      batch.set(eventRef, {
         tripId: schedule.id, route: schedule.route, driver: schedule.driver,
         action: auto ? `Auto-Departed (5 min timer)` : `Departed (${finalVacant} vacant)`, 
         timestamp: Timestamp.now()
       });
+
+      await batch.commit(); // Commit both at exactly the same time
       setIsDeparting(false);
+      setVacantSeats(1);
     } catch (error) { alert("Error updating status: " + error.message); }
   };
 
@@ -84,11 +91,10 @@ const DispatcherTripCard = ({ schedule, handleDelete, handleStatusChange }) => {
         <button onClick={() => handleDelete(schedule.id)} className="btn-outline">✕</button>
       </div>
       
-      {/* AUTO-DEPART TOGGLE (Only visible when Full) */}
       {schedule.status === 'Full' && (
         <div className="toggle-container">
+          <span className="toggle-label">Auto Depart</span>
           <div className={`toggle-switch ${isAuto ? 'auto' : 'manual'}`} onClick={handleToggleAuto}>
-            <span className="toggle-switch-text">{isAuto ? 'AUTO' : 'MANUAL'}</span>
             <div className="toggle-knob"></div>
           </div>
         </div>
@@ -111,9 +117,43 @@ const DispatcherTripCard = ({ schedule, handleDelete, handleStatusChange }) => {
           <h4 style={{ marginBottom: '8px' }}>Confirm Departure</h4>
           <div className="dialog-options">
             <label><input type="radio" checked={isFull} onChange={() => setIsFull(true)} /> Full</label>
-            <label><input type="radio" checked={!isFull} onChange={() => setIsFull(false)} /> Has Vacancy</label>
+            <label>
+              <input 
+                type="radio" 
+                checked={!isFull} 
+                onChange={() => {
+                  setIsFull(false);
+                  if (vacantSeats < 1 || vacantSeats === '') setVacantSeats(1);
+                }} 
+              /> Has Vacancy
+            </label>
           </div>
-          {!isFull && <input type="number" min="1" placeholder="Vacant seats" value={vacantSeats} onChange={(e) => setVacantSeats(e.target.value)} className="input-field" style={{ marginBottom: '10px' }} />}
+          
+          {!isFull && (
+            <input 
+              type="number" 
+              min="1" 
+              placeholder="Vacant seats" 
+              value={vacantSeats} 
+              onChange={(e) => {
+                const val = e.target.value;
+                // Allow empty string for typing, but enforce minimum of 1
+                if (val === '') {
+                  setVacantSeats('');
+                } else {
+                  const num = parseInt(val, 10);
+                  setVacantSeats(num < 1 ? 1 : num);
+                }
+              }}
+              onBlur={() => {
+                // If they leave it blank, default back to 1
+                if (vacantSeats === '' || vacantSeats < 1) setVacantSeats(1);
+              }}
+              className="input-field" 
+              style={{ marginBottom: '10px', width: '100%', padding: '10px', fontSize: '16px' }} 
+            />
+          )}
+          
           <div style={{ display: 'flex', gap: '10px' }}>
             <button onClick={() => confirmDeparture(false)} className="btn btn-success" style={{ flex: 1 }}>Confirm</button>
             <button onClick={() => setIsDeparting(false)} className="btn btn-secondary" style={{ flex: 1 }}>Cancel</button>
@@ -224,18 +264,23 @@ const DispatcherView = ({ schedules }) => {
     else setNewTrip({ ...newTrip, driver: '', plateNumber: '', phone: '' });
   };
 
-  const handleStatusChange = async (id, newStatus) => {
+    const handleStatusChange = async (id, newStatus) => {
     try {
       const schedule = schedules.find(s => s.id === id);
       const updateData = { status: newStatus };
       if (newStatus !== 'Departed') updateData.vacantSeats = 0;
       
-      await updateDoc(doc(db, "trips", id), updateData);
+      const batch = writeBatch(db);
+      const tripRef = doc(db, "trips", id);
+      const eventRef = doc(collection(db, "trip_events"));
 
-      await addDoc(collection(db, "trip_events"), {
+      batch.update(tripRef, updateData);
+      batch.set(eventRef, {
         tripId: id, route: schedule.route, driver: schedule.driver,
         action: `Status changed to ${newStatus}`, timestamp: Timestamp.now()
       });
+
+      await batch.commit();
     } catch (error) { alert("Error: " + error.message); }
   };
 
