@@ -65,7 +65,7 @@ const TripManager = ({ groupId, fleet, fares }) => {
       });
       setNewTrip({ time24: '', destination: 'Tacloban', driver: '', plateNumber: '', phone: '', fare: fares['Tacloban'] || '' });
       setIsAdding(false);
-    } catch (error) { alert("Error adding trip: " + error.message); }
+    } catch (error) { toast.error("Failed to add trip."); }
   };
 
   const handleDeleteTrip = async (tripId) => {
@@ -83,7 +83,7 @@ const TripManager = ({ groupId, fleet, fares }) => {
         departureTime: displayTime
       });
       setEditingTripId(null);
-    } catch (error) { alert("Error updating trip: " + error.message); }
+    } catch (error) { toast.error("Failed to update trip."); }
   };
 
   return (
@@ -211,7 +211,7 @@ const TemplateManager = ({ fleet, fares }) => {
         // 4. Execute the atomic batch
         await batch.commit();
       } catch (error) {
-        alert("Error deleting group: " + error.message);
+        toast.error("Failed to delete group.");
       }
     }
   };
