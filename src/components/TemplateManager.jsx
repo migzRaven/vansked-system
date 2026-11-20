@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, addDoc, deleteDoc, doc, onSnapshot, updateDoc } from 'firebase/firestore';
+import { collection, addDoc, deleteDoc, doc, onSnapshot, updateDoc, getDocs, writeBatch } from 'firebase/firestore';
 import { db } from '../firebase';
 
 const formatTimeDisplay = (time24) => {
@@ -13,14 +13,10 @@ const formatTimeDisplay = (time24) => {
 
 const DESTINATIONS = ['Tacloban', 'Sogod', 'Bato'];
 
-const TripManager = ({ groupId }) => {
+const TripManager = ({ groupId, fleet, fares }) => {
   const [trips, setTrips] = useState([]);
-  const [fleet, setFleet] = useState([]);
-  const [fares, setFares] = useState({});
-  
   const [isAdding, setIsAdding] = useState(false);
   const [newTrip, setNewTrip] = useState({ time24: '', destination: 'Tacloban', driver: '', plateNumber: '', phone: '', fare: '' });
-  
   const [editingTripId, setEditingTripId] = useState(null);
   const [editTripData, setEditTripData] = useState({});
 
@@ -30,19 +26,6 @@ const TripManager = ({ groupId }) => {
     });
     return () => unsub();
   }, [groupId]);
-
-  useEffect(() => {
-    const unsubFleet = onSnapshot(collection(db, "fleet"), (snap) => setFleet(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
-    const unsubFares = onSnapshot(collection(db, "fares"), (snap) => {
-      const fareData = {}; snap.docs.forEach(d => { fareData[d.id] = d.data().amount; }); setFares(fareData);
-    });
-    return () => { unsubFleet(); unsubFares(); };
-  }, []);
-
-  // Auto-fill fare for new trip
-  useEffect(() => {
-    if (fares[newTrip.destination]) setNewTrip(prev => ({ ...prev, fare: fares[newTrip.destination] }));
-  }, [newTrip.destination, fares]);
 
   const handleDriverSelect = (e, isEditMode = false) => {
     const selectedVan = fleet.find(v => v.plateNumber === e.target.value);
@@ -60,7 +43,7 @@ const TripManager = ({ groupId }) => {
     setEditTripData({
       ...editTripData,
       destination: newDest,
-      fare: fares[newDest] || editTripData.fare // Auto-fill fare from matrix if available
+      fare: fares[newDest] || editTripData.fare 
     });
   };
 
@@ -79,7 +62,7 @@ const TripManager = ({ groupId }) => {
         phone: newTrip.phone,
         fare: newTrip.fare
       });
-      setNewTrip({ time24: '', destination: 'Tacloban', driver: '', plateNumber: '', phone: '', fare: '' });
+      setNewTrip({ time24: '', destination: 'Tacloban', driver: '', plateNumber: '', phone: '', fare: fares['Tacloban'] || '' });
       setIsAdding(false);
     } catch (error) { alert("Error adding trip: " + error.message); }
   };
@@ -116,7 +99,6 @@ const TripManager = ({ groupId }) => {
            <label style={{ fontSize: '12px', fontWeight: 'bold' }}>Departure Time</label>
            <input type="time" value={newTrip.time24} onChange={e => setNewTrip({...newTrip, time24: e.target.value})} required className="input-field" />
            
-           {/* MOBILE FRIENDLY ROUTE DROPDOWNS */}
            <label style={{ fontSize: '12px', fontWeight: 'bold', marginTop: '5px' }}>Route</label>
            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
              <input type="text" value="St. Bernard" readOnly className="input-field" style={{ backgroundColor: 'var(--bg)', color: 'var(--muted)', textAlign: 'center' }} />
@@ -190,7 +172,7 @@ const TripManager = ({ groupId }) => {
   );
 };
 
-const TemplateManager = () => {
+const TemplateManager = ({ fleet, fares }) => {
   const [groups, setGroups] = useState([]);
   const [newGroup, setNewGroup] = useState({ name: '', days: { Mon: true, Tue: true, Wed: true, Thu: true, Fri: true, Sat: true, Sun: false } });
   const [expandedGroupId, setExpandedGroupId] = useState(null);
@@ -208,8 +190,29 @@ const TemplateManager = () => {
     setNewGroup({ name: '', days: { Mon: true, Tue: true, Wed: true, Thu: true, Fri: true, Sat: true, Sun: false } });
   };
 
+  // Phase 2: Cascade Delete Logic
   const handleDeleteGroup = async (id) => {
-    if (window.confirm("Delete this entire group?")) await deleteDoc(doc(db, "schedule_groups", id));
+    if (window.confirm("Delete this entire group and all its trips?")) {
+      try {
+        const batch = writeBatch(db);
+        
+        // 1. Get all trips in this group
+        const tripsSnapshot = await getDocs(collection(db, "schedule_groups", id, "trips"));
+        
+        // 2. Add them to the batch for deletion
+        tripsSnapshot.forEach((doc) => {
+          batch.delete(doc.ref);
+        });
+        
+        // 3. Add the parent group to the batch for deletion
+        batch.delete(doc(db, "schedule_groups", id));
+        
+        // 4. Execute the atomic batch
+        await batch.commit();
+      } catch (error) {
+        alert("Error deleting group: " + error.message);
+      }
+    }
   };
 
   return (
@@ -247,7 +250,7 @@ const TemplateManager = () => {
                 <span>{expandedGroupId === group.id ? '▲' : '▼'}</span>
               </div>
             </div>
-            {expandedGroupId === group.id && <TripManager groupId={group.id} />}
+            {expandedGroupId === group.id && <TripManager groupId={group.id} fleet={fleet} fares={fares} />}
           </div>
         ))}
       </div>

@@ -4,7 +4,8 @@ import './PassengerView.css';
 
 const PassengerView = ({ schedules }) => {
   const now = new Date().getTime();
-  const gracePeriod = 15 * 60 * 1000; // 15 minutes grace period
+  // Phase 2: Standardized to 30 minutes (in milliseconds)
+  const gracePeriod = 30 * 60 * 1000; 
 
   const upcomingTrips = [];
   const pastTrips = [];
@@ -12,7 +13,6 @@ const PassengerView = ({ schedules }) => {
   schedules.forEach(trip => {
     const depTime = trip.departureAt ? trip.departureAt.toDate().getTime() : 0;
     
-    // If the trip has already left, OR the time has passed, move it down.
     if (trip.status === 'Departed' || (now > depTime + gracePeriod) || trip.status === 'Overdue') {
       pastTrips.push(trip);
     } else {
@@ -20,10 +20,7 @@ const PassengerView = ({ schedules }) => {
     }
   });
 
-  // Sort upcoming ascending (earliest first)
   upcomingTrips.sort((a, b) => (a.departureAt?.toMillis() || 0) - (b.departureAt?.toMillis() || 0));
-  
-  // Sort past DESCENDING (most recent first)
   pastTrips.sort((a, b) => (b.departureAt?.toMillis() || 0) - (a.departureAt?.toMillis() || 0));
 
   const nextDeparture = upcomingTrips.length > 0 ? upcomingTrips[0] : null;

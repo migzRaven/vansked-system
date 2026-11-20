@@ -23,14 +23,12 @@ const QrIcon = () => (
     <rect x="3" y="14" width="7" height="7"></rect>
   </svg>
 );
-
 const BackIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}>
     <line x1="19" y1="12" x2="5" y2="12"></line>
     <polyline points="12 19 5 12 12 5"></polyline>
   </svg>
 );
-
 const HamburgerIcon = () => (
   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <line x1="3" y1="12" x2="21" y2="12"></line>
@@ -38,41 +36,33 @@ const HamburgerIcon = () => (
     <line x1="3" y1="18" x2="21" y2="18"></line>
   </svg>
 );
-
 const CloseIcon = () => (
   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <line x1="18" y1="6" x2="6" y2="18"></line>
     <line x1="6" y1="6" x2="18" y2="18"></line>
   </svg>
 );
-
 const ChevronRight = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
     <polyline points="9 18 15 12 9 6"></polyline>
   </svg>
 );
 
-// --- SMART FLOATING TOGGLE ---
 const FloatingToggle = () => {
   const { currentUser } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   useEffect(() => {
     const handlePressStart = (e) => {
-      if (e.target && !e.target.closest('.fab-rectangle')) {
-        setIsCollapsed(true);
-      }
+      if (e.target && !e.target.closest('.fab-rectangle')) setIsCollapsed(true);
     };
     const handlePressEnd = () => setIsCollapsed(false);
-
     window.addEventListener('touchstart', handlePressStart, { passive: true });
     window.addEventListener('touchend', handlePressEnd);
     window.addEventListener('mousedown', handlePressStart);
     window.addEventListener('mouseup', handlePressEnd);
-
     return () => {
       window.removeEventListener('touchstart', handlePressStart);
       window.removeEventListener('touchend', handlePressEnd);
@@ -81,14 +71,13 @@ const FloatingToggle = () => {
     };
   }, []);
 
-  // Show on all staff pages, hide on login/public pages
   if (!currentUser || location.pathname === '/login' || location.pathname === '/qr') return null;
 
   const isPassengerView = location.pathname === '/';
   const isDispatcherView = location.pathname === '/dispatcher';
   
   let buttonText = 'Dashboard';
-  let btnClass = 'btn-go-dispatcher'; // Default Green
+  let btnClass = 'btn-go-dispatcher';
   let destination = '/dispatcher';
 
   if (isPassengerView) {
@@ -99,36 +88,24 @@ const FloatingToggle = () => {
     buttonText = 'Passenger';
     btnClass = 'btn-go-passenger'; 
     destination = '/';
-  } else {
-    // If on Analytics, Templates, or Fleet
-    buttonText = 'Dashboard';
-    btnClass = 'btn-go-dispatcher'; 
-    destination = '/dispatcher';
   }
 
   return (
-    <div 
-      className={`fab-rectangle ${btnClass} ${isCollapsed ? 'collapsed' : ''}`}
-      onClick={() => navigate(destination)}
-    >
+    <div className={`fab-rectangle ${btnClass} ${isCollapsed ? 'collapsed' : ''}`} onClick={() => navigate(destination)}>
       <span className="fab-text">{buttonText}</span>
       <span className="fab-arrow"><ChevronRight /></span>
     </div>
   );
 };
 
-// --- NAVIGATION COMPONENT ---
 const Navigation = () => {
   const { currentUser, logout } = useAuth();
   const location = useLocation();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  
   const isQrPage = location.pathname === '/qr';
   const isLoginPage = location.pathname === '/login';
 
-  useEffect(() => {
-    setIsDrawerOpen(false);
-  }, [location.pathname]);
+  useEffect(() => { setIsDrawerOpen(false); }, [location.pathname]);
   
   return (
     <>
@@ -144,7 +121,6 @@ const Navigation = () => {
             )
           )}
         </div>
-
         <div className="nav-right">
           {currentUser ? (
             <>
@@ -195,14 +171,38 @@ const Navigation = () => {
 
 const AppContent = () => {
   const [schedules, setSchedules] = useState([]);
+  const [fleet, setFleet] = useState([]);
+  const [fares, setFares] = useState({});
+  
+  // Phase 2: Midnight Rollover State
+  const [todayStr, setTodayStr] = useState(() => {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  });
 
+  // Phase 2: Midnight Rollover Checker (Runs every minute)
   useEffect(() => {
-    const todayStr = new Intl.DateTimeFormat('en-CA', { 
-      timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' 
-    }).format(new Date());
+    const interval = setInterval(() => {
+      const currentDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+      setTodayStr(prev => prev !== currentDate ? currentDate : prev);
+    }, 60000); 
+    return () => clearInterval(interval);
+  }, []);
 
+  // Phase 2: Unified Fleet and Fares Subscriptions
+  useEffect(() => {
+    const unsubFleet = onSnapshot(collection(db, "fleet"), (snap) => {
+      setFleet(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+    const unsubFares = onSnapshot(collection(db, "fares"), (snap) => {
+      const fareData = {}; snap.docs.forEach(d => { fareData[d.id] = d.data().amount; });
+      setFares(fareData);
+    });
+    return () => { unsubFleet(); unsubFares(); };
+  }, []);
+
+  // Trips Subscription using todayStr
+  useEffect(() => {
     const q = query(collection(db, "trips"), where("date", "==", todayStr));
-
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const tripsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       tripsData.sort((a, b) => {
@@ -213,24 +213,22 @@ const AppContent = () => {
     }, (error) => {
       console.error("Firestore error: ", error);
     });
-
     return () => unsubscribe();
-  }, []);
+  }, [todayStr]);
 
   return (
     <BrowserRouter>
       <Navigation />
       <FloatingToggle />
-
       <Routes>
         <Route path="/" element={<PassengerView schedules={schedules} />} />
         <Route path="/qr" element={<QRCodeView />} />
         <Route path="/login" element={<Login />} />
         
-        <Route path="/dispatcher" element={<ProtectedRoute><DispatcherView schedules={schedules} /></ProtectedRoute>} />
+        <Route path="/dispatcher" element={<ProtectedRoute><DispatcherView schedules={schedules} fleet={fleet} fares={fares} /></ProtectedRoute>} />
         <Route path="/analytics" element={<ProtectedRoute><AnalyticsView /></ProtectedRoute>} />
-        <Route path="/templates" element={<ProtectedRoute><TemplateManager /></ProtectedRoute>} />
-        <Route path="/fleet" className="drawer-link" element={<ProtectedRoute><FleetManager /></ProtectedRoute>} />
+        <Route path="/templates" element={<ProtectedRoute><TemplateManager fleet={fleet} fares={fares} /></ProtectedRoute>} />
+        <Route path="/fleet" element={<ProtectedRoute><FleetManager /></ProtectedRoute>} />
       </Routes>
     </BrowserRouter>
   );
