@@ -1,0 +1,14 @@
+.template-card { border: 1px solid #ccc; border-radius: 8px; margin-bottom: 15px; overflow: hidden; }
+.template-header { display: flex; justify-content: space-between; align-items: center; padding: 15px; background-color: #fff; cursor: pointer; }
+.template-title { margin: 0; color: #0056b3; }
+.template-days { font-size: 12px; color: #666; }
+.template-header-actions { display: flex; gap: 15px; align-items: center; }
+.template-trip-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.template-trip-item { background-color: #fff; padding: 12px; border: 1px solid #ddd; border-radius: 8px; }
+.template-trip-info { font-size: 14px; }
+.template-trip-meta { color: #666; }
+.template-trip-actions { display: flex; gap: 8px; }
+.template-trip-view { display: flex; flex-direction: column; gap: 10px; }
+.template-trip-edit { display: flex; flex-direction: column; gap: 10px; }
+.template-route-group { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
+.template-route-row { display: flex; align-items: center; gap: 10px; }

@@ -210,11 +210,10 @@ const AppContent = () => {
       <FloatingToggle />
       
       {/* Suspense handles the Lazy Loading fallback */}
-      <Suspense fallback={
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh', color: 'var(--muted)', fontSize: '18px' }}>
-          Loading VanSked...
-        </div>
-      }>
+      
+<Suspense fallback={
+  <div className="loading-screen">Loading VanSked...</div>
+}>
         <Routes>
           <Route path="/" element={<PassengerView schedules={schedules} />} />
           <Route path="/qr" element={<QRCodeView />} />

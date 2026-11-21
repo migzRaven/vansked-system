@@ -53,3 +53,10 @@
   color: var(--muted);
   padding: 40px 20px;
 }
+
+.next-departure-section { margin-bottom: 30px; }
+.next-departure-title { font-size: 0.9rem; color: var(--amber); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px; font-weight: 800; }
+.next-departure-card-wrapper { transform: scale(1.02); transform-origin: top center; }
+.later-today-section { margin-top: 10px; }
+.earlier-today-section { margin-top: 40px; }
+.section-title { font-size: 0.9rem; color: var(--muted); margin-bottom: 15px; text-transform: uppercase; letter-spacing: 1px; }

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { collection, addDoc, deleteDoc, doc, onSnapshot, updateDoc, getDocs, writeBatch } from 'firebase/firestore';
-import { db } from '../firebase';
 import toast from 'react-hot-toast';
+import { db } from '../firebase';
+import './TemplateManager.css';
 
 const formatTimeDisplay = (time24) => {
   if (!time24) return '';
@@ -41,11 +42,7 @@ const TripManager = ({ groupId, fleet, fares }) => {
 
   const handleEditDestinationChange = (e) => {
     const newDest = e.target.value;
-    setEditTripData({
-      ...editTripData,
-      destination: newDest,
-      fare: fares[newDest] || editTripData.fare 
-    });
+    setEditTripData({ ...editTripData, destination: newDest, fare: fares[newDest] || editTripData.fare });
   };
 
   const handleAddTrip = async (e) => {
@@ -54,14 +51,7 @@ const TripManager = ({ groupId, fleet, fares }) => {
       const finalRoute = `St. Bernard to ${newTrip.destination}`;
       const displayTime = formatTimeDisplay(newTrip.time24);
       await addDoc(collection(db, "schedule_groups", groupId, "trips"), {
-        time24: newTrip.time24,
-        departureTime: displayTime,
-        destination: newTrip.destination,
-        route: finalRoute,
-        driver: newTrip.driver,
-        plateNumber: newTrip.plateNumber,
-        phone: newTrip.phone,
-        fare: newTrip.fare
+        time24: newTrip.time24, departureTime: displayTime, destination: newTrip.destination, route: finalRoute, driver: newTrip.driver, plateNumber: newTrip.plateNumber, phone: newTrip.phone, fare: newTrip.fare
       });
       setNewTrip({ time24: '', destination: 'Tacloban', driver: '', plateNumber: '', phone: '', fare: fares['Tacloban'] || '' });
       setIsAdding(false);
@@ -77,11 +67,7 @@ const TripManager = ({ groupId, fleet, fares }) => {
     try {
       const finalRoute = `St. Bernard to ${editTripData.destination}`;
       const displayTime = formatTimeDisplay(editTripData.time24);
-      await updateDoc(doc(db, "schedule_groups", groupId, "trips", editingTripId), {
-        ...editTripData,
-        route: finalRoute,
-        departureTime: displayTime
-      });
+      await updateDoc(doc(db, "schedule_groups", groupId, "trips", editingTripId), { ...editTripData, route: finalRoute, departureTime: displayTime });
       setEditingTripId(null);
     } catch (error) { toast.error("Failed to update trip."); }
   };
@@ -97,13 +83,13 @@ const TripManager = ({ groupId, fleet, fares }) => {
 
       {isAdding && (
         <form onSubmit={handleAddTrip} className="form-group" style={{ marginBottom: '15px', padding: '15px', backgroundColor: '#fff', border: '1px solid #ccc', borderRadius: '8px' }}>
-           <label style={{ fontSize: '12px', fontWeight: 'bold' }}>Departure Time</label>
+           <label className="form-label">Departure Time</label>
            <input type="time" value={newTrip.time24} onChange={e => setNewTrip({...newTrip, time24: e.target.value})} required className="input-field" />
            
-           <label style={{ fontSize: '12px', fontWeight: 'bold', marginTop: '5px' }}>Route</label>
-           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+           <label className="form-label" style={{ marginTop: '5px' }}>Route</label>
+           <div className="template-route-group">
              <input type="text" value="St. Bernard" readOnly className="input-field" style={{ backgroundColor: 'var(--bg)', color: 'var(--muted)', textAlign: 'center' }} />
-             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+             <div className="template-route-row">
                <span style={{ fontSize: '14px', fontWeight: 'bold' }}>to</span>
                <select value={newTrip.destination} onChange={e => setNewTrip({...newTrip, destination: e.target.value})} className="input-field" style={{ flex: 1 }}>
                  {DESTINATIONS.map(dest => <option key={dest} value={dest}>{dest}</option>)}
@@ -111,13 +97,13 @@ const TripManager = ({ groupId, fleet, fares }) => {
              </div>
            </div>
 
-           <label style={{ fontSize: '12px', fontWeight: 'bold', marginTop: '5px' }}>Driver & Van</label>
+           <label className="form-label" style={{ marginTop: '5px' }}>Driver & Van</label>
            <select value={newTrip.plateNumber} onChange={(e) => handleDriverSelect(e, false)} required className="input-field">
              <option value="">-- Select Driver --</option>
              {fleet.map(van => <option key={van.id} value={van.plateNumber}>{van.driver} ({van.plateNumber})</option>)}
            </select>
 
-           <label style={{ fontSize: '12px', fontWeight: 'bold', marginTop: '5px' }}>Fare</label>
+           <label className="form-label" style={{ marginTop: '5px' }}>Fare</label>
            <input type="text" placeholder="Fare" value={newTrip.fare} onChange={e => setNewTrip({...newTrip, fare: e.target.value})} required className="input-field" />
 
            <button type="submit" className="btn btn-success" style={{ marginTop: '15px' }}>Save Trip</button>
@@ -125,16 +111,15 @@ const TripManager = ({ groupId, fleet, fares }) => {
       )}
 
       {trips.length === 0 ? <p style={{ fontSize: '13px', color: '#666' }}>No trips added yet.</p> : (
-        <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        <ul className="template-trip-list">
           {trips.map(trip => (
-            <li key={trip.id} style={{ backgroundColor: '#fff', padding: '12px', border: '1px solid #ddd', borderRadius: '8px' }}>
+            <li key={trip.id} className="template-trip-item">
               {editingTripId === trip.id ? (
-                <form onSubmit={handleUpdateTrip} className="form-group">
+                <form onSubmit={handleUpdateTrip} className="form-group template-trip-edit">
                   <input type="time" value={editTripData.time24} onChange={e => setEditTripData({...editTripData, time24: e.target.value})} required className="input-field" />
-                  
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', margin: '8px 0' }}>
+                  <div className="template-route-group">
                     <input type="text" value="St. Bernard" readOnly className="input-field" style={{ backgroundColor: 'var(--bg)', color: 'var(--muted)', textAlign: 'center' }} />
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div className="template-route-row">
                       <span style={{ fontSize: '14px', fontWeight: 'bold' }}>to</span>
                       <select value={editTripData.destination} onChange={handleEditDestinationChange} className="input-field" style={{ flex: 1 }}>
                         {DESTINATIONS.map(dest => <option key={dest} value={dest}>{dest}</option>)}
@@ -146,7 +131,7 @@ const TripManager = ({ groupId, fleet, fares }) => {
                     <option value="">-- Select Driver --</option>
                     {fleet.map(van => <option key={van.id} value={van.plateNumber}>{van.driver} ({van.plateNumber})</option>)}
                   </select>
-                  <input type="text" value={editTripData.fare} onChange={e => setEditTripData({...editTripData, fare: e.target.value})} required className="input-field" style={{ marginTop: '8px' }} />
+                  <input type="text" value={editTripData.fare} onChange={e => setEditTripData({...editTripData, fare: e.target.value})} required className="input-field" />
                   
                   <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
                     <button type="submit" className="btn btn-success" style={{ flex: 1 }}>Save</button>
@@ -154,12 +139,12 @@ const TripManager = ({ groupId, fleet, fares }) => {
                   </div>
                 </form>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  <div style={{ fontSize: '14px' }}>
+                <div className="template-trip-view">
+                  <div className="template-trip-info">
                     <strong>{trip.departureTime}</strong> - {trip.route} <br/>
-                    <span style={{ color: '#666' }}>Driver: {trip.driver} | Fare: ₱{trip.fare}</span>
+                    <span className="template-trip-meta">Driver: {trip.driver} | Fare: ₱{trip.fare}</span>
                   </div>
-                  <div style={{ display: 'flex', gap: '8px' }}>
+                  <div className="template-trip-actions">
                     <button onClick={() => { setEditingTripId(trip.id); setEditTripData(trip); }} className="btn btn-warning" style={{ flex: 1, padding: '6px' }}>Edit</button>
                     <button onClick={() => handleDeleteTrip(trip.id)} className="btn btn-danger" style={{ flex: 1, padding: '6px' }}>Delete</button>
                   </div>
@@ -191,28 +176,15 @@ const TemplateManager = ({ fleet, fares }) => {
     setNewGroup({ name: '', days: { Mon: true, Tue: true, Wed: true, Thu: true, Fri: true, Sat: true, Sun: false } });
   };
 
-  // Phase 2: Cascade Delete Logic
   const handleDeleteGroup = async (id) => {
     if (window.confirm("Delete this entire group and all its trips?")) {
       try {
         const batch = writeBatch(db);
-        
-        // 1. Get all trips in this group
         const tripsSnapshot = await getDocs(collection(db, "schedule_groups", id, "trips"));
-        
-        // 2. Add them to the batch for deletion
-        tripsSnapshot.forEach((doc) => {
-          batch.delete(doc.ref);
-        });
-        
-        // 3. Add the parent group to the batch for deletion
+        tripsSnapshot.forEach((doc) => batch.delete(doc.ref));
         batch.delete(doc(db, "schedule_groups", id));
-        
-        // 4. Execute the atomic batch
         await batch.commit();
-      } catch (error) {
-        toast.error("Failed to delete group.");
-      }
+      } catch (error) { toast.error("Failed to delete group."); }
     }
   };
 
@@ -240,13 +212,13 @@ const TemplateManager = ({ fleet, fares }) => {
       <div>
         <h3>Your Schedule Groups</h3>
         {groups.map(group => (
-          <div key={group.id} style={{ border: '1px solid #ccc', borderRadius: '8px', marginBottom: '15px', overflow: 'hidden' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px', backgroundColor: '#fff', cursor: 'pointer' }} onClick={() => setExpandedGroupId(expandedGroupId === group.id ? null : group.id)}>
+          <div key={group.id} className="template-card">
+            <div className="template-header" onClick={() => setExpandedGroupId(expandedGroupId === group.id ? null : group.id)}>
               <div>
-                <h4 style={{ margin: 0, color: '#0056b3' }}>{group.name}</h4>
-                <span style={{ fontSize: '12px', color: '#666' }}>Days: {Object.keys(group.days || {}).filter(d => group.days[d]).join(', ')}</span>
+                <h4 className="template-title">{group.name}</h4>
+                <span className="template-days">Days: {Object.keys(group.days || {}).filter(d => group.days[d]).join(', ')}</span>
               </div>
-              <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+              <div className="template-header-actions">
                 <button onClick={(e) => { e.stopPropagation(); handleDeleteGroup(group.id); }} className="btn-outline" style={{ fontSize: '12px' }}>Delete</button>
                 <span>{expandedGroupId === group.id ? '▲' : '▼'}</span>
               </div>

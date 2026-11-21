@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { doc, updateDoc, addDoc, deleteDoc, collection, getDocs, onSnapshot, writeBatch, Timestamp, setDoc } from 'firebase/firestore';
+import toast from 'react-hot-toast';
 import { db } from '../firebase';
 import './DispatcherView.css';
-import toast from 'react-hot-toast';
 
 const formatTimeDisplay = (time24) => {
   if (!time24) return '';
@@ -26,19 +26,14 @@ const DESTINATIONS = ['Tacloban', 'Sogod', 'Bato'];
 const DispatcherTripCard = ({ schedule, handleDelete, handleStatusChange }) => {
   const [isDeparting, setIsDeparting] = useState(false);
   const [isFull, setIsFull] = useState(true);
-  
-  // Default to 1 to avoid zero-vacancy confusion
   const [vacantSeats, setVacantSeats] = useState(1); 
-  
   const [isAuto, setIsAuto] = useState(true);
   const [timeLeft, setTimeLeft] = useState(300); 
 
   useEffect(() => {
     let timer;
     if (schedule.status === 'Full' && isAuto && timeLeft > 0 && !isDeparting) {
-      timer = setInterval(() => {
-        setTimeLeft((prev) => prev - 1);
-      }, 1000);
+      timer = setInterval(() => setTimeLeft((prev) => prev - 1), 1000);
     } else if (schedule.status === 'Full' && isAuto && timeLeft === 0 && !isDeparting) {
       confirmDeparture(true);
     }
@@ -53,21 +48,12 @@ const DispatcherTripCard = ({ schedule, handleDelete, handleStatusChange }) => {
     }
   }, [schedule.status]);
 
-  const handleToggleAuto = () => {
-    if (!isAuto) {
-      setTimeLeft(300); 
-    }
-    setIsAuto(!isAuto);
-  };
-
-    const confirmDeparture = async (auto = false) => {
+  const confirmDeparture = async (auto = false) => {
     try {
-      const finalVacant = auto ? 0 : (isFull ? 0 : parseInt(vacantSeats) || 0);
-      
-      // Use a batch for atomic write
+      const finalVacant = auto ? 0 : (isFull ? 0 : parseInt(vacantSeats) || 1);
       const batch = writeBatch(db);
       const tripRef = doc(db, "trips", schedule.id);
-      const eventRef = doc(collection(db, "trip_events")); // Create empty reference for new ID
+      const eventRef = doc(collection(db, "trip_events"));
 
       batch.update(tripRef, { status: 'Departed', vacantSeats: finalVacant });
       batch.set(eventRef, {
@@ -75,8 +61,7 @@ const DispatcherTripCard = ({ schedule, handleDelete, handleStatusChange }) => {
         action: auto ? `Auto-Departed (5 min timer)` : `Departed (${finalVacant} vacant)`, 
         timestamp: Timestamp.now()
       });
-
-      await batch.commit(); // Commit both at exactly the same time
+      await batch.commit(); 
       setIsDeparting(false);
       setVacantSeats(1);
     } catch (error) { toast.error("Error updating status."); }
@@ -95,7 +80,7 @@ const DispatcherTripCard = ({ schedule, handleDelete, handleStatusChange }) => {
       {schedule.status === 'Full' && (
         <div className="toggle-container">
           <span className="toggle-label">Auto Depart</span>
-          <div className={`toggle-switch ${isAuto ? 'auto' : 'manual'}`} onClick={handleToggleAuto}>
+          <div className={`toggle-switch ${isAuto ? 'auto' : 'manual'}`} onClick={() => { if(!isAuto) setTimeLeft(300); setIsAuto(!isAuto); }}>
             <div className="toggle-knob"></div>
           </div>
         </div>
@@ -118,44 +103,18 @@ const DispatcherTripCard = ({ schedule, handleDelete, handleStatusChange }) => {
           <h4 style={{ marginBottom: '8px' }}>Confirm Departure</h4>
           <div className="dialog-options">
             <label><input type="radio" checked={isFull} onChange={() => setIsFull(true)} /> Full</label>
-            <label>
-              <input 
-                type="radio" 
-                checked={!isFull} 
-                onChange={() => {
-                  setIsFull(false);
-                  if (vacantSeats < 1 || vacantSeats === '') setVacantSeats(1);
-                }} 
-              /> Has Vacancy
-            </label>
+            <label><input type="radio" checked={!isFull} onChange={() => { setIsFull(false); if (vacantSeats < 1 || vacantSeats === '') setVacantSeats(1); }} /> Has Vacancy</label>
           </div>
           
           {!isFull && (
-            <input 
-              type="number" 
-              min="1" 
-              placeholder="Vacant seats" 
-              value={vacantSeats} 
-              onChange={(e) => {
-                const val = e.target.value;
-                // Allow empty string for typing, but enforce minimum of 1
-                if (val === '') {
-                  setVacantSeats('');
-                } else {
-                  const num = parseInt(val, 10);
-                  setVacantSeats(num < 1 ? 1 : num);
-                }
-              }}
-              onBlur={() => {
-                // If they leave it blank, default back to 1
-                if (vacantSeats === '' || vacantSeats < 1) setVacantSeats(1);
-              }}
-              className="input-field" 
-              style={{ marginBottom: '10px', width: '100%', padding: '10px', fontSize: '16px' }} 
-            />
+            <div className="stepper-container">
+              <button type="button" className="stepper-btn" onClick={() => setVacantSeats(prev => Math.max(1, prev - 1))} disabled={vacantSeats <= 1}>−</button>
+              <input type="text" inputMode="numeric" pattern="[0-9]*" value={vacantSeats} onChange={(e) => { const val = e.target.value.replace(/\D/g, ''); if (val === '') setVacantSeats(''); else setVacantSeats(parseInt(val, 10) < 1 ? 1 : parseInt(val, 10)); }} onBlur={() => { if (vacantSeats === '' || vacantSeats < 1) setVacantSeats(1); }} className="stepper-input" />
+              <button type="button" className="stepper-btn" onClick={() => setVacantSeats(prev => (parseInt(prev) || 0) + 1)}>+</button>
+            </div>
           )}
           
-          <div style={{ display: 'flex', gap: '10px' }}>
+          <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
             <button onClick={() => confirmDeparture(false)} className="btn btn-success" style={{ flex: 1 }}>Confirm</button>
             <button onClick={() => setIsDeparting(false)} className="btn btn-secondary" style={{ flex: 1 }}>Cancel</button>
           </div>
@@ -165,51 +124,30 @@ const DispatcherTripCard = ({ schedule, handleDelete, handleStatusChange }) => {
   );
 };
 
-const DispatcherView = ({ schedules }) => {
+const DispatcherView = ({ schedules, fleet, fares }) => {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [availableTemplates, setAvailableTemplates] = useState([]);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [fleet, setFleet] = useState([]);
-  const [fares, setFares] = useState({});
   
-  const [newTrip, setNewTrip] = useState({ 
-    time24: '', destination: 'Tacloban', driver: '', plateNumber: '', phone: '', fare: '', status: 'Waiting' 
-  });
+  const [newTrip, setNewTrip] = useState({ time24: '', destination: 'Tacloban', driver: '', plateNumber: '', phone: '', fare: '', status: 'Waiting' });
 
   const waitingCount = schedules.filter(s => s.status === 'Waiting' || s.status === 'Overdue').length;
   const boardingCount = schedules.filter(s => s.status === 'Boarding' || s.status === 'Full').length;
   const departedCount = schedules.filter(s => s.status === 'Departed').length;
 
   useEffect(() => {
-    const unsubFleet = onSnapshot(collection(db, "fleet"), (snap) => {
-      setFleet(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
-    const unsubFares = onSnapshot(collection(db, "fares"), (snap) => {
-      const fareData = {}; snap.docs.forEach(d => { fareData[d.id] = d.data().amount; });
-      setFares(fareData);
-    });
-    return () => { unsubFleet(); unsubFares(); };
-  }, []);
-
-  useEffect(() => {
-    if (fares[newTrip.destination]) {
-      setNewTrip(prev => ({ ...prev, fare: fares[newTrip.destination] }));
-    }
+    if (fares[newTrip.destination]) setNewTrip(prev => ({ ...prev, fare: fares[newTrip.destination] }));
   }, [newTrip.destination, fares]);
 
   const openTemplateModal = async () => {
     try {
       const todayDay = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Manila', weekday: 'short' }).format(new Date());
       const groupsSnapshot = await getDocs(collection(db, "schedule_groups"));
-      
-      const activeGroups = groupsSnapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data() }))
-        .filter(group => group.days && group.days[todayDay]);
-
+      const activeGroups = groupsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).filter(group => group.days && group.days[todayDay]);
       setAvailableTemplates(activeGroups);
       setIsModalOpen(true);
-    } catch (error) { toast.error("Error fetching templates: " + error.message); }
+    } catch (error) { toast.error("Error fetching templates."); }
   };
 
   const generateSpecificTemplate = async (groupId) => {
@@ -217,7 +155,6 @@ const DispatcherView = ({ schedules }) => {
     try {
       const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
       const tripsSnapshot = await getDocs(collection(db, "schedule_groups", groupId, "trips"));
-      
       const batch = writeBatch(db);
       let addedCount = 0;
 
@@ -228,34 +165,19 @@ const DispatcherView = ({ schedules }) => {
         if (!schedules.some(s => s.id === newTripRef.id)) {
           const depTimestamp = getTimestampForToday(trip.time24);
           const depTimeMs = depTimestamp.toDate().getTime();
-          
           let initialStatus = 'Waiting';
-          if (new Date().getTime() > depTimeMs + 1800000) {
-            initialStatus = 'Overdue'; 
-          }
+          if (new Date().getTime() > depTimeMs + 1800000) initialStatus = 'Overdue'; 
 
           batch.set(newTripRef, {
-            date: todayStr,
-            departureAt: depTimestamp,
-            departureTime: trip.departureTime,
-            route: trip.route,
-            driver: trip.driver,
-            plateNumber: trip.plateNumber,
-            phone: trip.phone || '',
-            fare: trip.fare,
-            capacity: 14,
-            seatsTaken: 0,
-            status: initialStatus,
-            vacantSeats: 0
+            date: todayStr, departureAt: depTimestamp, departureTime: trip.departureTime, route: trip.route, driver: trip.driver, plateNumber: trip.plateNumber, phone: trip.phone || '', fare: trip.fare, capacity: 14, seatsTaken: 0, status: initialStatus, vacantSeats: 0
           });
           addedCount++;
         }
       }
-      
       await batch.commit();
       toast.success(`Generated ${addedCount} new trips.`);
       setIsModalOpen(false);
-    } catch (error) { toast.error("Error generating board: " + error.message); }
+    } catch (error) { toast.error("Error generating board."); }
     setIsGenerating(false);
   };
 
@@ -265,22 +187,17 @@ const DispatcherView = ({ schedules }) => {
     else setNewTrip({ ...newTrip, driver: '', plateNumber: '', phone: '' });
   };
 
-    const handleStatusChange = async (id, newStatus) => {
+  const handleStatusChange = async (id, newStatus) => {
     try {
       const schedule = schedules.find(s => s.id === id);
       const updateData = { status: newStatus };
       if (newStatus !== 'Departed') updateData.vacantSeats = 0;
       
       const batch = writeBatch(db);
-      const tripRef = doc(db, "trips", id);
-      const eventRef = doc(collection(db, "trip_events"));
-
-      batch.update(tripRef, updateData);
-      batch.set(eventRef, {
-        tripId: id, route: schedule.route, driver: schedule.driver,
-        action: `Status changed to ${newStatus}`, timestamp: Timestamp.now()
+      batch.update(doc(db, "trips", id), updateData);
+      batch.set(doc(collection(db, "trip_events")), {
+        tripId: id, route: schedule.route, driver: schedule.driver, action: `Status changed to ${newStatus}`, timestamp: Timestamp.now()
       });
-
       await batch.commit();
     } catch (error) { toast.error("Action failed."); }
   };
@@ -289,7 +206,7 @@ const DispatcherView = ({ schedules }) => {
     try {
       await setDoc(doc(db, "fares", newTrip.destination), { amount: newTrip.fare });
       toast.success("Fare updated successfully.");
-    } catch (error) { toast.error("Error saving fare: " + error.message); }
+    } catch (error) { toast.error("Error saving fare."); }
   };
 
   const handleDelete = async (id) => {
@@ -302,41 +219,31 @@ const DispatcherView = ({ schedules }) => {
       const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
       const finalRoute = `St. Bernard to ${newTrip.destination}`;
       const displayTime = formatTimeDisplay(newTrip.time24);
-
       const depTimestamp = getTimestampForToday(newTrip.time24);
       const depTimeMs = depTimestamp.toDate().getTime();
       
       let initialStatus = 'Waiting';
-      if (new Date().getTime() > depTimeMs + 1800000) {
-        initialStatus = 'Overdue'; 
-      }
+      if (new Date().getTime() > depTimeMs + 1800000) initialStatus = 'Overdue'; 
 
       await addDoc(collection(db, "trips"), {
-        date: todayStr, departureAt: depTimestamp,
-        departureTime: displayTime, route: finalRoute, driver: newTrip.driver,
-        plateNumber: newTrip.plateNumber, phone: newTrip.phone, fare: newTrip.fare,
-        capacity: 14, seatsTaken: 0, status: initialStatus, vacantSeats: 0
+        date: todayStr, departureAt: depTimestamp, departureTime: displayTime, route: finalRoute, driver: newTrip.driver, plateNumber: newTrip.plateNumber, phone: newTrip.phone, fare: newTrip.fare, capacity: 14, seatsTaken: 0, status: initialStatus, vacantSeats: 0
       });
       
       setNewTrip({ time24: '', destination: 'Tacloban', driver: '', plateNumber: '', phone: '', fare: '', status: 'Waiting' });
       setIsFormOpen(false);
-    } catch (error) { toast.error("Error saving trip: " + error.message); }
+    } catch (error) { toast.error("Error saving trip."); }
   };
 
   const sortedSchedules = [...schedules].sort((a, b) => {
     const now = new Date().getTime();
     if (a.status === 'Departed' && b.status !== 'Departed') return 1;
     if (a.status !== 'Departed' && b.status === 'Departed') return -1;
-
     const aTime = a.departureAt ? a.departureAt.toMillis() : 0;
     const bTime = b.departureAt ? b.departureAt.toMillis() : 0;
-    
     const aIsPast = (now > aTime + 1800000) || a.status === 'Overdue';
     const bIsPast = (now > bTime + 1800000) || b.status === 'Overdue';
-
     if (aIsPast && !bIsPast) return 1;
     if (!aIsPast && bIsPast) return -1;
-
     return aTime - bTime;
   });
 
@@ -355,55 +262,44 @@ const DispatcherView = ({ schedules }) => {
 
       <div className="action-bar">
         <button onClick={openTemplateModal} className="btn btn-warning">⚡ Generate Board</button>
-        <button onClick={() => setIsFormOpen(!isFormOpen)} className="btn btn-success">
-          {isFormOpen ? 'Cancel' : '+ Add Trip'}
-        </button>
+        <button onClick={() => setIsFormOpen(!isFormOpen)} className="btn btn-success">{isFormOpen ? 'Cancel' : '+ Add Trip'}</button>
       </div>
 
       {isModalOpen && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000, padding: '20px' }}>
-          <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '12px', width: '100%', maxWidth: '400px', maxHeight: '80vh', overflowY: 'auto' }}>
-            <h3 style={{ marginBottom: '15px' }}>Select Template to Generate</h3>
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <h3 className="modal-title">Select Template to Generate</h3>
+            <p className="modal-subtitle">Only templates active for today are shown.</p>
             
             {availableTemplates.length === 0 ? (
               <p style={{ color: 'red' }}>No templates are scheduled for today.</p>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div className="template-list">
                 {availableTemplates.map(template => (
-                  <div key={template.id} style={{ border: '1px solid #ccc', padding: '12px', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <strong>{template.name}</strong>
-                    </div>
-                    <button 
-                      onClick={() => generateSpecificTemplate(template.id)} 
-                      disabled={isGenerating}
-                      className="btn btn-primary" 
-                      style={{ padding: '6px 12px', fontSize: '12px' }}
-                    >
+                  <div key={template.id} className="modal-template-item">
+                    <strong>{template.name}</strong>
+                    <button onClick={() => generateSpecificTemplate(template.id)} disabled={isGenerating} className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '12px' }}>
                       {isGenerating ? '...' : 'Generate'}
                     </button>
                   </div>
                 ))}
               </div>
             )}
-
-            <button onClick={() => setIsModalOpen(false)} className="btn btn-secondary" style={{ width: '100%', marginTop: '20px' }}>
-              Close
-            </button>
+            <button onClick={() => setIsModalOpen(false)} className="btn btn-secondary modal-close-btn">Close</button>
           </div>
         </div>
       )}
 
       {isFormOpen && (
         <div className="form-container">
-          <form onSubmit={handleAddTrip} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <label>Departure Time</label>
+          <form onSubmit={handleAddTrip} className="form-group">
+            <label className="form-label">Departure Time</label>
             <input type="time" value={newTrip.time24} onChange={e => setNewTrip({...newTrip, time24: e.target.value})} required className="input-field" />
 
-            <label>Route</label>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <input type="text" value="St. Bernard" readOnly className="input-field" style={{ backgroundColor: 'var(--bg)', color: 'var(--muted)', textAlign: 'center' }} />
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <label className="form-label">Route</label>
+            <div className="form-route-group">
+              <input type="text" value="St. Bernard" readOnly className="input-field form-route-readonly" />
+              <div className="form-route-row">
                 <span style={{ fontWeight: 'bold' }}>to</span>
                 <select value={newTrip.destination} onChange={e => setNewTrip({...newTrip, destination: e.target.value})} className="input-field" style={{ flex: 1 }}>
                   {DESTINATIONS.map(dest => <option key={dest} value={dest}>{dest}</option>)}
@@ -411,26 +307,26 @@ const DispatcherView = ({ schedules }) => {
               </div>
             </div>
 
-            <label>Driver & Van</label>
+            <label className="form-label">Driver & Van</label>
             <select value={newTrip.plateNumber} onChange={handleDriverSelect} required className="input-field">
               <option value="">-- Select Driver --</option>
               {fleet.map(van => <option key={van.id} value={van.plateNumber}>{van.driver} ({van.plateNumber})</option>)}
             </select>
 
-            <label>Fare</label>
-            <div style={{ display: 'flex', gap: '10px' }}>
+            <label className="form-label">Fare</label>
+            <div className="form-fare-group">
               <input type="text" placeholder="Fare" value={newTrip.fare} onChange={e => setNewTrip({...newTrip, fare: e.target.value})} required className="input-field" style={{ flex: 1 }} />
               <button type="button" onClick={handleSaveDefaultFare} className="btn btn-secondary" style={{ fontSize: '12px' }}>Save Default</button>
             </div>
 
-            <button type="submit" className="btn btn-primary" style={{ marginTop: '10px' }}>Save Trip</button>
+            <button type="submit" className="btn btn-primary form-submit-btn">Save Trip</button>
           </form>
         </div>
       )}
       
       <main>
         {sortedSchedules.length === 0 ? (
-          <div style={{ textAlign: 'center', color: 'var(--muted)', padding: '40px 20px' }}>
+          <div className="empty-board">
             <h3>No trips on the board today.</h3>
             <p>Click "Generate Board" to load a template or add a trip manually.</p>
           </div>

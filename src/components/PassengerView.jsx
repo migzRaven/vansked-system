@@ -4,7 +4,6 @@ import './PassengerView.css';
 
 const PassengerView = ({ schedules }) => {
   const now = new Date().getTime();
-  // Phase 2: Standardized to 30 minutes (in milliseconds)
   const gracePeriod = 30 * 60 * 1000; 
 
   const upcomingTrips = [];
@@ -12,7 +11,6 @@ const PassengerView = ({ schedules }) => {
 
   schedules.forEach(trip => {
     const depTime = trip.departureAt ? trip.departureAt.toDate().getTime() : 0;
-    
     if (trip.status === 'Departed' || (now > depTime + gracePeriod) || trip.status === 'Overdue') {
       pastTrips.push(trip);
     } else {
@@ -45,21 +43,17 @@ const PassengerView = ({ schedules }) => {
         ) : (
           <>
             {nextDeparture && (
-              <div style={{ marginBottom: '30px' }}>
-                <h3 style={{ fontSize: '0.9rem', color: 'var(--amber)', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: '800' }}>
-                  ⚡ Next Departure
-                </h3>
-                <div style={{ transform: 'scale(1.02)', transformOrigin: 'top center' }}>
+              <div className="next-departure-section">
+                <h3 className="next-departure-title">⚡ Next Departure</h3>
+                <div className="next-departure-card-wrapper">
                   <ScheduleCard schedule={nextDeparture} />
                 </div>
               </div>
             )}
 
             {otherUpcoming.length > 0 && (
-              <div>
-                <h3 style={{ fontSize: '0.9rem', color: 'var(--muted)', marginBottom: '15px', textTransform: 'uppercase', letterSpacing: '1px' }}>
-                  Later Today
-                </h3>
+              <div className="later-today-section">
+                <h3 className="section-title">Later Today</h3>
                 {otherUpcoming.map((schedule) => (
                   <ScheduleCard key={schedule.id} schedule={schedule} />
                 ))}
@@ -67,10 +61,8 @@ const PassengerView = ({ schedules }) => {
             )}
 
             {pastTrips.length > 0 && (
-              <div style={{ marginTop: '40px' }}>
-                <h3 style={{ fontSize: '0.9rem', color: 'var(--muted)', marginBottom: '15px', textTransform: 'uppercase', letterSpacing: '1px' }}>
-                  Earlier Today
-                </h3>
+              <div className="earlier-today-section">
+                <h3 className="section-title">Earlier Today</h3>
                 {pastTrips.map((schedule) => (
                   <ScheduleCard key={schedule.id} schedule={schedule} />
                 ))}
