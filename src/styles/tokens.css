@@ -9,10 +9,13 @@
   --muted: #5B6B7C;
   --line: #E3E9F0;
   
-  --waiting: #2563EB;  --waiting-bg: #E8F0FE;
-  --boarding: #15803D; --boarding-bg: #DCFCE7;
-  --full: #B91C1C;     --full-bg: #FEE2E2;
-  --departed: #475569; --departed-bg: #E9EEF4;
+  /* Semantic Status Colors */
+  --waiting: #2563EB;  --waiting-bg: #E8F0FE;    /* Blue */
+  --boarding: #15803D; --boarding-bg: #DCFCE7;   /* Green */
+  --full: #B45309;     --full-bg: #FEF3C7;       /* Amber */
+  --departed: #475569; --departed-bg: #E9EEF4;   /* Slate */
+  --overdue: #B91C1C;  --overdue-bg: #FEE2E2;    /* Red */
+  --scheduled: #6D28D9;--scheduled-bg: #EDE9FE;  /* Purple */
   
   --radius: 16px;
   --shadow: 0 4px 12px rgba(11, 27, 43, 0.08);

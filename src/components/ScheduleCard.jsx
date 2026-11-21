@@ -6,11 +6,11 @@ const STATUS = {
   Boarding:  { cls: 'boarding',  label: 'Now Boarding' },
   Full:      { cls: 'full',      label: 'Full' },
   Departed:  { cls: 'departed',  label: 'Departed' },
+  Overdue:   { cls: 'overdue',   label: 'Overdue' },
   Scheduled: { cls: 'scheduled', label: 'Scheduled' }
 };
 
 export default function ScheduleCard({ schedule: s }) {
-  // TIME CHECKER: Has it been more than 30 mins since departure?
   let isPastTime = false;
   if (s.departureAt) {
     const depTimeMs = s.departureAt.toDate().getTime();
@@ -20,7 +20,6 @@ export default function ScheduleCard({ schedule: s }) {
     }
   }
 
-  // If time passed and dispatcher hasn't updated, show "Scheduled" to passenger
   let displayStatus = s.status;
   if (isPastTime && (s.status === 'Waiting' || s.status === 'Boarding' || s.status === 'Overdue')) {
     displayStatus = 'Scheduled';
@@ -47,8 +46,7 @@ export default function ScheduleCard({ schedule: s }) {
         </p>
       )}
 
-      {/* Only show call button if it's actively waiting or boarding */}
-      {displayStatus !== 'Departed' && displayStatus !== 'Full' && displayStatus !== 'Scheduled' && s.phone && (
+      {displayStatus !== 'Departed' && displayStatus !== 'Full' && displayStatus !== 'Scheduled' && displayStatus !== 'Overdue' && s.phone && (
         <a className="btn-call" href={`tel:${s.phone}`}>
           📞 Call {s.driver.split(' ')[0]}
         </a>

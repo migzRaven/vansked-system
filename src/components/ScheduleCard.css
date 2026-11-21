@@ -53,6 +53,8 @@
 .pill--boarding { background: var(--boarding-bg); color: var(--boarding); }
 .pill--full { background: var(--full-bg); color: var(--full); }
 .pill--departed { background: var(--departed-bg); color: var(--departed); }
+.pill--overdue { background: var(--overdue-bg); color: var(--overdue); }
+.pill--scheduled { background: var(--scheduled-bg); color: var(--scheduled); }
 
 .trip__note, .btn-call {
   grid-column: 1 / -1;
