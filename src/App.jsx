@@ -1,12 +1,11 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
-import { Toaster } from 'react-hot-toast'; // NEW: Toast notifications
+import { Toaster } from 'react-hot-toast';
 import { db } from './firebase';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 
-// Lazy Loading: Only downloads code when the user visits the page
 const PassengerView = lazy(() => import('./components/PassengerView'));
 const DispatcherView = lazy(() => import('./components/DispatcherView'));
 const TemplateManager = lazy(() => import('./components/TemplateManager'));
@@ -16,7 +15,7 @@ const QRCodeView = lazy(() => import('./components/QRCodeView'));
 const Login = lazy(() => import('./components/Login'));
 import './App.css';
 
-// --- ICONS --- (Keep all your existing icons here)
+// --- ICONS ---
 const QrIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}>
     <rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect>
@@ -79,12 +78,7 @@ const FloatingToggle = () => {
   else if (isDispatcherView) { buttonText = 'Passenger'; btnClass = 'btn-go-passenger'; destination = '/'; }
 
   return (
-    // Changed from <div> to <button> for accessibility
-    <button 
-      className={`fab-rectangle ${btnClass} ${isCollapsed ? 'collapsed' : ''}`} 
-      onClick={() => navigate(destination)}
-      aria-label={`Switch to ${buttonText} view`}
-    >
+    <button className={`fab-rectangle ${btnClass} ${isCollapsed ? 'collapsed' : ''}`} onClick={() => navigate(destination)} aria-label={`Switch to ${buttonText} view`}>
       <span className="fab-text">{buttonText}</span>
       <span className="fab-arrow"><ChevronRight /></span>
     </button>
@@ -92,7 +86,6 @@ const FloatingToggle = () => {
 };
 
 const Navigation = () => {
-  // ... (Keep your exact existing Navigation code here. No changes needed inside)
   const { currentUser, logout } = useAuth();
   const location = useLocation();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -167,8 +160,26 @@ const AppContent = () => {
   const [schedules, setSchedules] = useState([]);
   const [fleet, setFleet] = useState([]);
   const [fares, setFares] = useState({});
+  
+  // NEW: Track network status and last updated time
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [lastUpdated, setLastUpdated] = useState(new Date());
+
   const [todayStr, setTodayStr] = useState(() => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()));
 
+  // Network listeners
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  // Midnight Rollover
   useEffect(() => {
     const interval = setInterval(() => {
       const currentDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
@@ -178,9 +189,7 @@ const AppContent = () => {
   }, []);
 
   useEffect(() => {
-    const unsubFleet = onSnapshot(collection(db, "fleet"), (snap) => {
-      setFleet(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
+    const unsubFleet = onSnapshot(collection(db, "fleet"), (snap) => setFleet(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
     const unsubFares = onSnapshot(collection(db, "fares"), (snap) => {
       const fareData = {}; snap.docs.forEach(d => { fareData[d.id] = d.data().amount; });
       setFares(fareData);
@@ -197,6 +206,7 @@ const AppContent = () => {
         return a.departureAt.toMillis() - b.departureAt.toMillis();
       });
       setSchedules(tripsData);
+      setLastUpdated(new Date()); // Update sync time
     }, (error) => {
       console.error("Firestore error: ", error);
     });
@@ -205,17 +215,14 @@ const AppContent = () => {
 
   return (
     <BrowserRouter>
-      <Toaster position="top-center" /> {/* Added Toast Notifications */}
+      <Toaster position="top-center" />
       <Navigation />
       <FloatingToggle />
       
-      {/* Suspense handles the Lazy Loading fallback */}
-      
-<Suspense fallback={
-  <div className="loading-screen">Loading VanSked...</div>
-}>
+      <Suspense fallback={<div className="loading-screen">Loading VanSked...</div>}>
         <Routes>
-          <Route path="/" element={<PassengerView schedules={schedules} />} />
+          {/* Pass the new network props to PassengerView */}
+          <Route path="/" element={<PassengerView schedules={schedules} isOnline={isOnline} lastUpdated={lastUpdated} />} />
           <Route path="/qr" element={<QRCodeView />} />
           <Route path="/login" element={<Login />} />
           

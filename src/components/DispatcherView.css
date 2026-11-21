@@ -91,7 +91,7 @@
 .segmented-control button.active-boarding { background: var(--boarding-bg); color: var(--boarding); }
 .segmented-control button.active-full { background: var(--full-bg); color: var(--full); }
 .segmented-control button.active-departed { background: var(--departed-bg); color: var(--departed); }
-.segmented-control button.active-overdue { background: #FEE2E2; color: #B91C1C; }
+.segmented-control button.active-overdue { background: var(--overdue-bg); color: var(--overdue); }
 
 /* Departure Dialog */
 .departure-dialog {

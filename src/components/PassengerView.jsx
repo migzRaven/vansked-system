@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import ScheduleCard from './ScheduleCard';
 import './PassengerView.css';
 
-const PassengerView = ({ schedules }) => {
+const PassengerView = ({ schedules, isOnline, lastUpdated }) => {
+  const [isEarlierOpen, setIsEarlierOpen] = useState(false);
+  
   const now = new Date().getTime();
   const gracePeriod = 30 * 60 * 1000; 
 
@@ -24,13 +26,26 @@ const PassengerView = ({ schedules }) => {
   const nextDeparture = upcomingTrips.length > 0 ? upcomingTrips[0] : null;
   const otherUpcoming = upcomingTrips.slice(1); 
 
+  // Format current PH Date
+  const currentDate = new Intl.DateTimeFormat('en-PH', { 
+    timeZone: 'Asia/Manila', weekday: 'short', month: 'short', day: 'numeric' 
+  }).format(new Date());
+
+  // Format Last Updated Time
+  const syncTime = lastUpdated.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+
   return (
     <div className="passenger-layout">
       <header className="passenger-header">
-        <h1>St. Bernard Terminal</h1>
-        <div className="live-indicator">
+        <div>
+          <h1>St. Bernard Terminal</h1>
+          <p style={{ color: '#a0aec0', fontSize: '0.85rem', marginTop: '4px' }}>{currentDate}</p>
+        </div>
+        
+        {/* Dynamic Freshness Indicator */}
+        <div className={`live-indicator ${!isOnline ? 'offline' : ''}`}>
           <span className="pulse-dot"></span>
-          Live Updates
+          {!isOnline ? 'Offline - Cached Data' : `Live · ${syncTime}`}
         </div>
       </header>
 
@@ -62,15 +77,31 @@ const PassengerView = ({ schedules }) => {
 
             {pastTrips.length > 0 && (
               <div className="earlier-today-section">
-                <h3 className="section-title">Earlier Today</h3>
-                {pastTrips.map((schedule) => (
-                  <ScheduleCard key={schedule.id} schedule={schedule} />
-                ))}
+                <button 
+                  className="collapsible-header" 
+                  onClick={() => setIsEarlierOpen(!isEarlierOpen)}
+                >
+                  <h3 className="section-title" style={{ margin: 0 }}>Earlier Today ({pastTrips.length})</h3>
+                  <span>{isEarlierOpen ? '▲' : '▼'}</span>
+                </button>
+                
+                {isEarlierOpen && (
+                  <div style={{ marginTop: '15px' }}>
+                    {pastTrips.map((schedule) => (
+                      <ScheduleCard key={schedule.id} schedule={schedule} />
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </>
         )}
       </main>
+
+      <footer className="passenger-footer">
+        <p>Departure information is updated in real-time by terminal dispatchers.</p>
+        <p>Please confirm schedules at the terminal counter.</p>
+      </footer>
     </div>
   );
 };

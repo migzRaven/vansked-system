@@ -3,6 +3,7 @@
   min-height: 100vh;
 }
 
+/* Add/Replace these in PassengerView.css */
 .passenger-header {
   background: var(--navy-900);
   color: white;
@@ -11,20 +12,31 @@
   top: 0;
   z-index: 10;
   border-bottom: 4px solid var(--amber);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
 }
 
 .passenger-header h1 {
   font-size: 1.4rem;
   font-weight: 700;
-  margin-bottom: 8px;
+  margin-bottom: 0;
 }
 
 .live-indicator {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   color: #a0aec0;
+  background-color: rgba(255,255,255,0.1);
+  padding: 4px 10px;
+  border-radius: 20px;
+}
+
+.live-indicator.offline {
+  color: #fc8181; /* Red text for offline */
+  background-color: rgba(229, 62, 62, 0.2);
 }
 
 .pulse-dot {
@@ -33,6 +45,39 @@
   background-color: #22c55e;
   border-radius: 50%;
   animation: pulse 2s infinite;
+}
+
+.live-indicator.offline .pulse-dot {
+  background-color: #ef4444; /* Red dot for offline */
+  animation: none;
+}
+
+/* Collapsible Section */
+.collapsible-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  background: transparent;
+  border: none;
+  padding: 10px 0;
+  cursor: pointer;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 15px;
+}
+
+.collapsible-header span { font-size: 12px; }
+.collapsible-header:hover { color: var(--text); }
+
+/* Footer */
+.passenger-footer {
+  text-align: center;
+  padding: 30px 20px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  border-top: 1px solid var(--line);
+  margin-top: 40px;
 }
 
 @keyframes pulse {
