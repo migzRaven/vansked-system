@@ -69,15 +69,36 @@
 }
 
 .btn-call {
-  display: block;
-  text-align: center;
-  padding: 14px;
-  border-radius: 12px;
-  background: var(--navy-900);
-  color: white;
+  grid-column: 1 / -1; /* Spans full width */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px;
+  border-radius: 8px;
+  
+  /* Minimalist outline style */
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--text);
   text-decoration: none;
   font-weight: 600;
-  font-size: 0.95rem;
+  font-size: 0.85rem;
   margin-top: 8px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
 }
-.btn-call:active { background: var(--navy-700); }
+
+.btn-call:hover {
+  background-color: var(--bg);
+}
+
+.btn-call:active {
+  background-color: var(--line);
+}
+
+.btn-call:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+

@@ -1,9 +1,86 @@
-/* KPI Strip */
+/* --- Dashboard Header --- */
+.dispatcher-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 2px solid var(--line);
+}
+
+.dispatcher-header-left h1 {
+  color: #0056b3;
+  margin-bottom: 4px;
+  font-size: 1.6rem;
+}
+
+.dispatcher-subtitle {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.dispatcher-header-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.staff-identity {
+  font-size: 0.85rem;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+/* --- Live Indicator --- */
+.live-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75rem;
+  color: var(--text);
+  background-color: #dcfce7; 
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-weight: 600;
+}
+
+.live-indicator.offline {
+  color: #b91c1c;
+  background-color: #fee2e2;
+}
+
+.pulse-dot {
+  width: 8px;
+  height: 8px;
+  background-color: #15803d;
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+
+.live-indicator.offline .pulse-dot {
+  background-color: #ef4444;
+  animation: none;
+}
+
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); }
+  70% { box-shadow: 0 0 0 6px rgba(34, 197, 94, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+}
+
+/* --- KPI Strip --- */
 .kpi-strip {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr); 
   gap: 10px;
   margin-bottom: 20px;
+}
+
+@media (max-width: 500px) {
+  .kpi-strip {
+    grid-template-columns: repeat(2, 1fr); /* Stack 2x2 on mobile */
+  }
 }
 
 .kpi-card {
@@ -29,7 +106,7 @@
   color: var(--text);
 }
 
-/* Trip Card */
+/* --- Trip Card --- */
 .trip-card {
   background: var(--surface);
   border-radius: 16px;
@@ -58,6 +135,36 @@
   margin-top: 4px;
 }
 
+.trip-card-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.btn-icon {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.btn-icon:hover {
+  background: var(--line);
+}
+
+.trip-card-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--bg);
+  padding: 15px;
+  border-radius: 8px;
+}
+
+/* --- Segmented Control --- */
 .segmented-control {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -93,7 +200,7 @@
 .segmented-control button.active-departed { background: var(--departed-bg); color: var(--departed); }
 .segmented-control button.active-overdue { background: var(--overdue-bg); color: var(--overdue); }
 
-/* Departure Dialog */
+/* --- Departure Dialog --- */
 .departure-dialog {
   background: #fff3cd;
   border: 1px solid #ffeeba;
@@ -116,7 +223,7 @@
   cursor: pointer;
 }
 
-/* Action Bar */
+/* --- Action Bar --- */
 .action-bar {
   display: flex;
   gap: 10px;
@@ -131,7 +238,7 @@
   font-weight: 700;
 }
 
-/* Form Container */
+/* --- Form Container --- */
 .form-container {
   background: var(--surface);
   padding: 20px;
@@ -149,7 +256,7 @@
   display: block;
 }
 
-/* Toggle Switch Container */
+/* --- Toggle Switch --- */
 .toggle-container {
   display: flex;
   justify-content: flex-end;
@@ -170,7 +277,6 @@
   color: var(--muted);
 }
 
-/* The Toggle Switch Track (Much smaller now) */
 .toggle-switch {
   position: relative;
   width: 40px;       
@@ -183,14 +289,13 @@
 }
 
 .toggle-switch.auto {
-  background-color: #22c55e; /* Friendly Green */
+  background-color: #22c55e; 
 }
 
 .toggle-switch.manual {
-  background-color: #f59e0b; /* Friendly Orange/Yellow */
+  background-color: #f59e0b; 
 }
 
-/* The Knob */
 .toggle-knob {
   position: absolute;
   top: 2px;
@@ -203,24 +308,53 @@
   transition: transform 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
 }
 
-/* Switch States */
 .toggle-switch.auto .toggle-knob {
-  transform: translateX(18px); /* 40px total - 18px knob - 4px padding */
+  transform: translateX(18px);
 }
 
 .toggle-switch.manual .toggle-knob {
   transform: translateX(0);    
 }
 
+/* --- Modals & Empty States --- */
+.modal-overlay { 
+  position: fixed; 
+  top: 0; left: 0; right: 0; bottom: 0; 
+  background-color: rgba(0,0,0,0.5); 
+  display: flex; 
+  justify-content: center; 
+  align-items: center; 
+  z-index: 1000; 
+  padding: 20px; 
+}
 
-.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 1000; padding: 20px; }
-.modal-content { background-color: white; padding: 20px; border-radius: 12px; width: 100%; max-width: 400px; max-height: 80vh; overflow-y: auto; }
+.modal-content { 
+  background-color: white; 
+  padding: 20px; 
+  border-radius: 12px; 
+  width: 100%; 
+  max-width: 400px; 
+  max-height: 80vh; 
+  overflow-y: auto; 
+}
+
 .modal-title { margin-bottom: 15px; }
 .modal-subtitle { font-size: 13px; color: #666; margin-bottom: 15px; }
-.modal-template-item { border: 1px solid #ccc; padding: 12px; borderRadius: 8px; display: flex; justify-content: space-between; align-items: center; }
+
+.modal-template-item { 
+  border: 1px solid #ccc; 
+  padding: 12px; 
+  border-radius: 8px;
+  display: flex; 
+  justify-content: space-between; 
+  align-items: center; 
+}
+
 .modal-close-btn { width: 100%; margin-top: 20px; }
 .template-list { display: flex; flex-direction: column; gap: 10px; }
 .empty-board { text-align: center; color: var(--muted); padding: 40px 20px; }
+
+/* --- Forms in Dispatcher --- */
 .form-label { font-weight: bold; font-size: 14px; margin-bottom: 4px; }
 .form-route-group { display: flex; flex-direction: column; gap: 8px; }
 .form-route-row { display: flex; align-items: center; gap: 10px; }

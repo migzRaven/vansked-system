@@ -1,0 +1,648 @@
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =========================================
+    // AUTHENTICATION AND ROLE HELPERS
+    // =========================================
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function staffPath(uid) {
+      return /databases/$(database)/documents/staff/$(uid);
+    }
+
+    function staffExists() {
+      return isSignedIn()
+        && exists(staffPath(request.auth.uid));
+    }
+
+    function staffData() {
+      return get(staffPath(request.auth.uid)).data;
+    }
+
+    function isActiveStaff() {
+      return staffExists()
+        && staffData().get('active', false) == true
+        && staffData().get('role', '') in [
+          'admin',
+          'dispatcher'
+        ];
+    }
+
+    function isAdmin() {
+      return isActiveStaff()
+        && staffData().get('role', '') == 'admin';
+    }
+
+    // =========================================
+    // DOCUMENT PATH HELPERS
+    // =========================================
+
+    function tripPath(tripId) {
+      return /databases/$(database)/documents/trips/$(tripId);
+    }
+
+    function publicTripPath(tripId) {
+      return /databases/$(database)/documents/public_trips/$(tripId);
+    }
+
+    // =========================================
+    // COMMON VALIDATION HELPERS
+    // =========================================
+
+    function validFareString(value) {
+      return value is string
+        && value.matches('^[0-9]+([.][0-9]{1,2})?$');
+    }
+
+    function validOptionalTimestamp(data, field) {
+      return !(field in data)
+        || data[field] is timestamp;
+    }
+
+    function validOptionalString(data, field) {
+      return !(field in data)
+        || data[field] is string;
+    }
+
+    // =========================================
+    // PUBLIC TRIP PROJECTION VALIDATION
+    // =========================================
+
+    // A public trip must contain only fields
+    // intended for passenger display.
+
+    function validPublicTrip(data) {
+      return data.keys().hasAll([
+          'date',
+          'departureAt',
+          'departureTime',
+          'route',
+          'driver',
+          'plateNumber',
+          'phone',
+          'fare',
+          'capacity',
+          'seatsTaken',
+          'vacantSeats',
+          'status',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'date',
+          'departureAt',
+          'departureTime',
+          'route',
+          'driver',
+          'plateNumber',
+          'phone',
+          'fare',
+          'capacity',
+          'seatsTaken',
+          'vacantSeats',
+          'status',
+          'updatedAt'
+        ])
+        && data.date is string
+        && data.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && data.departureAt is timestamp
+        && data.departureTime is string
+        && data.route is string
+        && data.driver is string
+        && data.plateNumber is string
+        && data.phone is string
+        && validFareString(data.fare)
+        && data.capacity is int
+        && data.capacity >= 1
+        && data.capacity <= 100
+        && data.seatsTaken is int
+        && data.seatsTaken >= 0
+        && data.seatsTaken <= data.capacity
+        && data.vacantSeats is int
+        && data.vacantSeats >= 0
+        && data.vacantSeats <= data.capacity
+        && data.status in [
+          'Waiting',
+          'Boarding',
+          'Full',
+          'Overdue',
+          'Departed'
+        ]
+        && data.updatedAt is timestamp;
+    }
+
+    // Compare every published field with the
+    // corresponding private trip document.
+
+    function publicProjectionMatches(tripData, publicData) {
+      return publicData.keys().hasAll([
+          'date',
+          'departureAt',
+          'departureTime',
+          'route',
+          'driver',
+          'plateNumber',
+          'phone',
+          'fare',
+          'capacity',
+          'seatsTaken',
+          'vacantSeats',
+          'status',
+          'updatedAt'
+        ])
+        && publicData.keys().hasOnly([
+          'date',
+          'departureAt',
+          'departureTime',
+          'route',
+          'driver',
+          'plateNumber',
+          'phone',
+          'fare',
+          'capacity',
+          'seatsTaken',
+          'vacantSeats',
+          'status',
+          'updatedAt'
+        ])
+        && publicData.date == tripData.date
+        && publicData.departureAt == tripData.departureAt
+        && publicData.departureTime == tripData.departureTime
+        && publicData.route == tripData.route
+        && publicData.driver == tripData.driver
+        && publicData.plateNumber == tripData.plateNumber
+        && publicData.phone == tripData.phone
+        && publicData.fare == tripData.fare
+        && publicData.capacity == tripData.capacity
+        && publicData.seatsTaken == tripData.seatsTaken
+        && publicData.vacantSeats == tripData.vacantSeats
+        && publicData.status == tripData.status
+        && publicData.updatedAt == tripData.updatedAt;
+    }
+
+    // Private trip writes require a matching public
+    // document in the final transaction state.
+
+    function hasMatchingPublicTrip(tripId, tripData) {
+      return existsAfter(publicTripPath(tripId))
+        && publicProjectionMatches(
+          tripData,
+          getAfter(publicTripPath(tripId)).data
+        );
+    }
+
+    // Public trip writes require a matching private
+    // document in the final transaction state.
+
+    function hasMatchingPrivateTrip(tripId, publicData) {
+      return existsAfter(tripPath(tripId))
+        && publicProjectionMatches(
+          getAfter(tripPath(tripId)).data,
+          publicData
+        );
+    }
+
+    // =========================================
+    // STAFF
+    // =========================================
+
+    match /staff/{uid} {
+
+      allow get: if isSignedIn()
+        && (
+          request.auth.uid == uid
+          || isAdmin()
+        );
+
+      allow list: if isAdmin();
+
+      // Staff roles cannot be changed through
+      // the client application.
+      allow create, update, delete: if false;
+    }
+
+    // =========================================
+    // PRIVATE TRIP VALIDATION
+    // =========================================
+
+    function validTrip(data) {
+      return data.keys().hasAll([
+          'capacity',
+          'date',
+          'departureAt',
+          'departureTime',
+          'driver',
+          'fare',
+          'phone',
+          'plateNumber',
+          'route',
+          'seatsTaken',
+          'status',
+          'vacantSeats'
+        ])
+        && data.keys().hasOnly([
+          'capacity',
+          'date',
+          'departureAt',
+          'departureTime',
+          'driver',
+          'fare',
+          'phone',
+          'plateNumber',
+          'route',
+          'seatsTaken',
+          'status',
+          'vacantSeats',
+          'time24',
+          'createdAt',
+          'updatedAt',
+          'statusUpdatedAt',
+          'departureConfirmedAt',
+          'sourceTemplateId'
+        ])
+        && data.capacity is int
+        && data.capacity >= 1
+        && data.capacity <= 100
+        && data.date is string
+        && data.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && data.departureAt is timestamp
+        && data.departureTime is string
+        && data.driver is string
+        && validFareString(data.fare)
+        && data.phone is string
+        && data.plateNumber is string
+        && data.route is string
+        && data.seatsTaken is int
+        && data.seatsTaken >= 0
+        && data.seatsTaken <= data.capacity
+        && data.vacantSeats is int
+        && data.vacantSeats >= 0
+        && data.vacantSeats <= data.capacity
+        && data.status in [
+          'Waiting',
+          'Boarding',
+          'Full',
+          'Overdue',
+          'Departed'
+        ]
+        && validOptionalString(data, 'time24')
+        && (
+          !('time24' in data)
+          || data.time24 == ''
+          || data.time24.matches(
+            '^(0[0-9]|1[0-9]|2[0-3]):[0-5][0-9]$'
+          )
+        )
+        && validOptionalTimestamp(data, 'createdAt')
+        && validOptionalTimestamp(data, 'updatedAt')
+        && validOptionalTimestamp(data, 'statusUpdatedAt')
+        && validOptionalTimestamp(data, 'departureConfirmedAt')
+        && validOptionalString(data, 'sourceTemplateId');
+    }
+
+    function validStatusTransition() {
+      return resource.data.status == request.resource.data.status
+        || (
+          resource.data.status != 'Departed'
+          && request.resource.data.status in [
+            'Waiting',
+            'Boarding',
+            'Full',
+            'Overdue',
+            'Departed'
+          ]
+        );
+    }
+
+    // =========================================
+    // PRIVATE TRIPS
+    // =========================================
+
+    match /trips/{tripId} {
+
+      allow read: if isActiveStaff();
+
+      // Creating a private trip requires a matching
+      // public passenger record in the same transaction.
+      allow create: if isActiveStaff()
+        && validTrip(request.resource.data)
+        && hasMatchingPublicTrip(
+          tripId,
+          request.resource.data
+        );
+
+      // Updating a private trip also requires the
+      // matching public projection to be updated.
+      allow update: if isActiveStaff()
+        && validTrip(request.resource.data)
+        && validStatusTransition()
+        && request.resource.data.diff(resource.data)
+          .affectedKeys()
+          .hasOnly([
+            'capacity',
+            'date',
+            'departureAt',
+            'departureTime',
+            'driver',
+            'fare',
+            'phone',
+            'plateNumber',
+            'route',
+            'seatsTaken',
+            'status',
+            'vacantSeats',
+            'time24',
+            'updatedAt',
+            'statusUpdatedAt',
+            'departureConfirmedAt'
+          ])
+        && hasMatchingPublicTrip(
+          tripId,
+          request.resource.data
+        );
+
+      // Deletion requires removal of the public
+      // passenger projection in the same transaction.
+      // Departed trips cannot be deleted.
+      allow delete: if isActiveStaff()
+        && resource.data.status != 'Departed'
+        && !existsAfter(publicTripPath(tripId));
+    }
+
+    // =========================================
+    // PUBLIC PASSENGER TRIPS
+    // =========================================
+
+    match /public_trips/{tripId} {
+
+      // Anyone can read passenger information.
+      allow read: if true;
+
+      // Creating a public record requires a matching
+      // private trip in the same transaction.
+      allow create: if isActiveStaff()
+        && validPublicTrip(request.resource.data)
+        && hasMatchingPrivateTrip(
+          tripId,
+          request.resource.data
+        );
+
+      // Updating a public record requires its private
+      // trip to be updated to exactly matching values.
+      allow update: if isActiveStaff()
+        && validPublicTrip(request.resource.data)
+        && hasMatchingPrivateTrip(
+          tripId,
+          request.resource.data
+        );
+
+      // Deleting a public record requires deletion
+      // of its private trip in the same transaction.
+      allow delete: if isActiveStaff()
+        && !existsAfter(tripPath(tripId));
+    }
+
+    // =========================================
+    // TRIP EVENT AUDIT LOGS
+    // =========================================
+
+    match /trip_events/{eventId} {
+
+      allow read: if isActiveStaff();
+
+      allow create: if isActiveStaff()
+        && request.resource.data.keys().hasAll([
+          'tripId',
+          'route',
+          'driver',
+          'action',
+          'previousStatus',
+          'newStatus',
+          'actorUid',
+          'actorEmail',
+          'timestamp'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'tripId',
+          'route',
+          'driver',
+          'action',
+          'previousStatus',
+          'newStatus',
+          'actorUid',
+          'actorEmail',
+          'timestamp'
+        ])
+        && request.resource.data.tripId is string
+        && request.resource.data.route is string
+        && request.resource.data.driver is string
+        && request.resource.data.action is string
+        && (
+          request.resource.data.previousStatus == null
+          || request.resource.data.previousStatus is string
+        )
+        && (
+          request.resource.data.newStatus == null
+          || request.resource.data.newStatus is string
+        )
+        && request.resource.data.actorUid == request.auth.uid
+        && request.resource.data.actorEmail is string
+        && request.resource.data.timestamp == request.time;
+
+      // Audit records cannot be edited or deleted.
+      allow update, delete: if false;
+    }
+
+    // =========================================
+    // FLEET
+    // =========================================
+
+    function validFleet(data) {
+      return data.keys().hasAll([
+          'driver',
+          'plateNumber',
+          'vanType'
+        ])
+        && data.keys().hasOnly([
+          'driver',
+          'plateNumber',
+          'vanType',
+          'phone',
+          'capacity',
+          'plateNumberNormalized',
+          'active',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.driver is string
+        && data.plateNumber is string
+        && data.vanType is string
+        && (
+          !('phone' in data)
+          || data.phone is string
+        )
+        && (
+          !('capacity' in data)
+          || (
+            data.capacity is int
+            && data.capacity >= 1
+            && data.capacity <= 100
+          )
+        )
+        && (
+          !('plateNumberNormalized' in data)
+          || data.plateNumberNormalized is string
+        )
+        && (
+          !('active' in data)
+          || data.active is bool
+        )
+        && validOptionalTimestamp(data, 'createdAt')
+        && validOptionalTimestamp(data, 'updatedAt');
+    }
+
+    match /fleet/{vehicleId} {
+
+      allow read: if isActiveStaff();
+
+      allow create, update: if isAdmin()
+        && validFleet(request.resource.data);
+
+      allow delete: if isAdmin();
+    }
+
+    // =========================================
+    // FARES
+    // =========================================
+
+    match /fares/{fareId} {
+
+      allow read: if isActiveStaff();
+
+      allow create, update: if isAdmin()
+        && request.resource.data.keys().hasOnly([
+          'amount'
+        ])
+        && request.resource.data.keys().hasAll([
+          'amount'
+        ])
+        && validFareString(request.resource.data.amount);
+
+      allow delete: if isAdmin();
+    }
+
+    // =========================================
+    // SCHEDULE GROUPS
+    // =========================================
+
+    function validScheduleGroup(data) {
+      return data.keys().hasAll([
+          'name',
+          'days'
+        ])
+        && data.keys().hasOnly([
+          'name',
+          'days'
+        ])
+        && data.name is string
+        && data.name.size() > 0
+        && data.days is map
+        && data.days.keys().hasAll([
+          'Mon',
+          'Tue',
+          'Wed',
+          'Thu',
+          'Fri',
+          'Sat',
+          'Sun'
+        ])
+        && data.days.keys().hasOnly([
+          'Mon',
+          'Tue',
+          'Wed',
+          'Thu',
+          'Fri',
+          'Sat',
+          'Sun'
+        ])
+        && data.days.Mon is bool
+        && data.days.Tue is bool
+        && data.days.Wed is bool
+        && data.days.Thu is bool
+        && data.days.Fri is bool
+        && data.days.Sat is bool
+        && data.days.Sun is bool;
+    }
+
+    match /schedule_groups/{groupId} {
+
+      allow read: if isActiveStaff();
+
+      allow create, update: if isActiveStaff()
+        && validScheduleGroup(request.resource.data);
+
+      allow delete: if isActiveStaff();
+    }
+
+    // =========================================
+    // NESTED SCHEDULE TEMPLATE TRIPS
+    // =========================================
+
+    function validTemplateTrip(data) {
+      return data.keys().hasAll([
+          'departureTime',
+          'destination',
+          'driver',
+          'fare',
+          'phone',
+          'plateNumber',
+          'route',
+          'time24'
+        ])
+        && data.keys().hasOnly([
+          'departureTime',
+          'destination',
+          'driver',
+          'fare',
+          'phone',
+          'plateNumber',
+          'route',
+          'time24'
+        ])
+        && data.departureTime is string
+        && data.destination is string
+        && data.driver is string
+        && validFareString(data.fare)
+        && data.phone is string
+        && data.plateNumber is string
+        && data.route is string
+        && data.time24 is string
+        && data.time24.matches(
+          '^(0[0-9]|1[0-9]|2[0-3]):[0-5][0-9]$'
+        );
+    }
+
+    match /schedule_groups/{groupId}/trips/{tripId} {
+
+      allow read: if isActiveStaff();
+
+      allow create, update: if isActiveStaff()
+        && validTemplateTrip(request.resource.data);
+
+      allow delete: if isActiveStaff();
+    }
+
+    // =========================================
+    // DEFAULT DENY
+    // =========================================
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

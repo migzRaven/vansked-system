@@ -1,0 +1,110 @@
+.public-migration-page {
+  width: min(100% - 32px, 1000px);
+  margin: 30px auto;
+  padding-bottom: 40px;
+}
+
+.public-migration-header {
+  margin-bottom: 24px;
+}
+
+.public-migration-header h1 {
+  margin-bottom: 8px;
+}
+
+.public-migration-header p,
+.public-migration-date {
+  color: var(--muted, #64748b);
+}
+
+.public-migration-notice,
+.public-migration-results {
+  padding: 20px;
+  margin-bottom: 20px;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 12px;
+  background: var(--card, #ffffff);
+}
+
+.public-migration-notice ul {
+  padding-left: 22px;
+  line-height: 1.8;
+}
+
+.public-migration-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.public-migration-button {
+  padding: 12px 18px;
+  border: 1px solid var(--border, #cbd5e1);
+  border-radius: 8px;
+  background: var(--card, #ffffff);
+  color: var(--text, #1e293b);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.public-migration-button.primary {
+  background: var(--primary, #166534);
+  border-color: transparent;
+  color: white;
+}
+
+.public-migration-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.public-migration-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px;
+  margin: 18px 0;
+}
+
+.public-migration-stats > div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 8px;
+}
+
+.public-migration-stats strong {
+  font-size: 1.5rem;
+}
+
+.public-migration-stats span {
+  color: var(--muted, #64748b);
+  font-size: 0.82rem;
+}
+
+.public-migration-warning {
+  margin-top: 18px;
+  padding: 14px;
+  border: 1px solid #eab308;
+  border-radius: 8px;
+  background: #fefce8;
+  color: #713f12;
+  overflow-wrap: anywhere;
+}
+
+.public-migration-warning p {
+  margin: 10px 0;
+  font-size: 0.9rem;
+}
+
+@media (max-width: 600px) {
+  .public-migration-actions {
+    flex-direction: column;
+  }
+
+  .public-migration-button {
+    width: 100%;
+  }
+}
