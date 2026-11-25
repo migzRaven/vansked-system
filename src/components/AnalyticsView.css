@@ -73,3 +73,54 @@
   font-weight: 600;
   color: var(--navy-700);
 }
+
+/* ---------------------------------------------
+   VIEW SEGMENTED CONTROL (Live Ops / Historical)
+--------------------------------------------- */
+
+.analytics-view-switch {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  margin-bottom: 20px;
+}
+
+.analytics-view-switch button {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  padding: 8px 18px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.analytics-view-switch button[aria-pressed="true"] {
+  background: var(--navy-900);
+  color: var(--amber);
+}
+
+.analytics-view-switch button:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
+}
+
+.analytics-history-fallback {
+  padding: 40px 0;
+  text-align: center;
+  color: var(--muted);
+}
+
+@media (max-width: 640px) {
+  .analytics-view-switch {
+    width: 100%;
+  }
+
+  .analytics-view-switch button {
+    flex: 1;
+  }
+}

@@ -1,5 +1,11 @@
 
-import { useEffect, useMemo, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import {
   collection,
   limit,
@@ -22,6 +28,14 @@ import {
 } from "recharts";
 
 import "./AnalyticsView.css";
+
+// --------------------------------------------------
+// HISTORICAL VIEW (loaded on first selection)
+// --------------------------------------------------
+
+const HistoryDashboard = lazy(
+  () => import("./HistoryDashboard")
+);
 
 // --------------------------------------------------
 // MANILA DATE UTILITIES
@@ -109,6 +123,24 @@ const AnalyticsView = () => {
   // ----------------------------------------------
 
   const [todayStr, setTodayStr] = useState(() => getManilaDate());
+
+  // ----------------------------------------------
+  // VIEW SEGMENT (LIVE OPS / HISTORICAL)
+  // ----------------------------------------------
+
+  const [analyticsView, setAnalyticsView] =
+    useState("live");
+
+  const showHistorical =
+    analyticsView === "historical";
+
+  // The historical dashboard mounts on first selection
+  // and stays mounted (hidden) afterwards so switching
+  // views never destroys its state or triggers
+  // duplicate scans.
+
+  const [historyMounted, setHistoryMounted] =
+    useState(false);
 
   // ----------------------------------------------
   // TRIP DATA STATE
@@ -302,25 +334,6 @@ const AnalyticsView = () => {
   }, [todaysTrips]);
 
   // ----------------------------------------------
-  // LOADING SCREEN
-  // ----------------------------------------------
-
-  if (loading) {
-    return (
-      <div
-        style={{
-          textAlign: "center",
-          marginTop: "50px",
-        }}
-        role="status"
-        aria-live="polite"
-      >
-        Loading analytics...
-      </div>
-    );
-  }
-
-  // ----------------------------------------------
   // ANALYTICS DASHBOARD
   // ----------------------------------------------
 
@@ -333,6 +346,92 @@ const AnalyticsView = () => {
         <h1>Terminal Analytics & Event Log</h1>
         <p>Live Operations Overview</p>
       </header>
+
+      {/* --------------------------------------
+          VIEW SEGMENTED CONTROL
+      -------------------------------------- */}
+
+      <div
+        className="analytics-view-switch"
+        role="group"
+        aria-label="Analytics view"
+      >
+        <button
+          type="button"
+          aria-pressed={analyticsView === "live"}
+          className={
+            analyticsView === "live"
+              ? "analytics-switch-button active"
+              : "analytics-switch-button"
+          }
+          onClick={() => setAnalyticsView("live")}
+        >
+          Live Ops
+        </button>
+        <button
+          type="button"
+          aria-pressed={showHistorical}
+          className={
+            showHistorical
+              ? "analytics-switch-button active"
+              : "analytics-switch-button"
+          }
+          onClick={() => {
+            setAnalyticsView("historical");
+            setHistoryMounted(true);
+          }}
+        >
+          Historical
+        </button>
+      </div>
+
+      {/* --------------------------------------
+          HISTORICAL VIEW — lazily loaded on
+          first selection, hidden while Live
+          Ops is active (no remounts, no
+          duplicate scans)
+      -------------------------------------- */}
+
+      {historyMounted ? (
+        <div
+          className="analytics-history-pane"
+          hidden={!showHistorical}
+        >
+          <Suspense
+            fallback={
+              <div
+                className="analytics-history-fallback"
+                role="status"
+                aria-live="polite"
+              >
+                Loading historical analytics…
+              </div>
+            }
+          >
+            <HistoryDashboard />
+          </Suspense>
+        </div>
+      ) : null}
+
+      {/* --------------------------------------
+          LIVE OPS — existing implementation
+      -------------------------------------- */}
+
+      {analyticsView === "live" ? (
+        <>
+          {loading ? (
+            <div
+              style={{
+                textAlign: "center",
+                marginTop: "50px",
+              }}
+              role="status"
+              aria-live="polite"
+            >
+              Loading analytics...
+            </div>
+          ) : (
+            <>
 
       {/* ERROR NOTIFICATIONS */}
 
@@ -512,6 +611,11 @@ const AnalyticsView = () => {
 
         </div>
       </div>
+
+            </>
+          )}
+        </>
+      ) : null}
 
     </div>
   );
