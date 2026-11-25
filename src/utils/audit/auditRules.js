@@ -340,6 +340,12 @@ export const createAuditRecord = (data) => {
 
   const destination = getDestination(data.route);
 
+  const departureConfirmedAtPresent =
+    "departureConfirmedAt" in data;
+
+  const departureConfirmedAtMs =
+    getDepartureMillis(data.departureConfirmedAt);
+
   const manilaParts =
     departureMs !== null ? getManilaParts(departureMs) : null;
 
@@ -380,6 +386,10 @@ export const createAuditRecord = (data) => {
     dateValid,
 
     departureMs,
+
+    departureConfirmedAtPresent,
+    departureConfirmedAtMs,
+
     manilaDateFromDeparture: manilaParts
       ? manilaParts.date
       : null,
@@ -449,6 +459,7 @@ export const createAuditState = () => ({
   departedInvariantDeltaDistribution: {},
 
   dateRange: { earliest: null, latest: null },
+  departedDateRange: { earliest: null, latest: null },
   distinctDates: new Set(),
 
   datesWithOccupancyEligible: new Set(),
@@ -457,11 +468,15 @@ export const createAuditState = () => ({
   byRoute: {},
   byRouteAndSlot: new Map(),
 
+  dateCheckedCount: 0,
+  dateConsistentCount: 0,
   dateMismatchCount: 0,
   dateInvalidExcludedFromConsistency: 0,
+  dateNoValidDepartureAtExcluded: 0,
+  time24ComparableCount: 0,
+  time24ConsistentCount: 0,
   time24MismatchCount: 0,
   time24AbsentExcluded: 0,
-  consistentDocs: 0,
 
   duplicatesStrong: new Map(),
   duplicatesStrongExcluded: {
@@ -474,6 +489,24 @@ export const createAuditState = () => ({
     invalidDate: 0,
     time24MissingOrEmpty: 0,
     routeUnavailable: 0,
+  },
+
+  departureProvenance: {
+    presentAndValid: {
+      documents: 0,
+      occupancyEligible: 0,
+      invariantViolations: 0,
+    },
+    missing: {
+      documents: 0,
+      occupancyEligible: 0,
+      invariantViolations: 0,
+    },
+    presentButInvalid: {
+      documents: 0,
+      occupancyEligible: 0,
+      invariantViolations: 0,
+    },
   },
 
   fleetMatchedPlates: new Set(),
@@ -511,6 +544,24 @@ const recordDateCoverage = (state, record) => {
     date > state.dateRange.latest
   ) {
     state.dateRange.latest = date;
+  }
+
+  // Departed-only span is tracked separately so total
+  // trip history is never reported as departed history.
+  if (record.isDeparted) {
+    if (
+      state.departedDateRange.earliest === null ||
+      date < state.departedDateRange.earliest
+    ) {
+      state.departedDateRange.earliest = date;
+    }
+
+    if (
+      state.departedDateRange.latest === null ||
+      date > state.departedDateRange.latest
+    ) {
+      state.departedDateRange.latest = date;
+    }
   }
 
   if (record.occupancyEligible) {
@@ -660,23 +711,53 @@ export const aggregateRecord = (state, record, fleet) => {
 
   if (record.departureMs !== null) {
     if (record.dateValid) {
-      if (record.dateConsistent && record.time24Consistent) {
-        state.consistentDocs += 1;
-      }
+      state.dateCheckedCount += 1;
 
-      if (!record.dateConsistent) {
+      if (record.dateConsistent) {
+        state.dateConsistentCount += 1;
+      } else {
         state.dateMismatchCount += 1;
       }
 
-      if (record.time24 !== null && !record.time24Consistent) {
-        state.time24MismatchCount += 1;
+      if (record.time24 !== null) {
+        state.time24ComparableCount += 1;
+
+        if (record.time24Consistent) {
+          state.time24ConsistentCount += 1;
+        } else {
+          state.time24MismatchCount += 1;
+        }
+      } else {
+        state.time24AbsentExcluded += 1;
       }
     } else {
       state.dateInvalidExcludedFromConsistency += 1;
     }
+  } else {
+    state.dateNoValidDepartureAtExcluded += 1;
+  }
 
-    if (record.time24 === null) {
-      state.time24AbsentExcluded += 1;
+  if (record.isDeparted) {
+    let provenanceGroup;
+
+    if (record.departureConfirmedAtMs !== null) {
+      provenanceGroup =
+        state.departureProvenance.presentAndValid;
+    } else if (record.departureConfirmedAtPresent) {
+      provenanceGroup =
+        state.departureProvenance.presentButInvalid;
+    } else {
+      provenanceGroup = state.departureProvenance.missing;
+    }
+
+    provenanceGroup.documents += 1;
+
+    if (record.occupancyEligible) {
+      provenanceGroup.occupancyEligible += 1;
+    }
+
+    if (record.seatsCoreValid && record.invariantDelta !== 0) {
+      provenanceGroup.invariantViolations += 1;
     }
   }
 
@@ -827,9 +908,14 @@ export const finalizeReport = (
     byRouteAndSlot[destination] = slots;
   });
 
-  const departedSpanDays = spanInDays(
+  const totalTripDateSpanDays = spanInDays(
     state.dateRange.earliest,
     state.dateRange.latest
+  );
+
+  const departedTripDateSpanDays = spanInDays(
+    state.departedDateRange.earliest,
+    state.departedDateRange.latest
   );
 
   const churnDetected =
@@ -942,11 +1028,28 @@ export const finalizeReport = (
     },
 
     timeConsistency: {
-      dateMismatchVsDepartureAt: state.dateMismatchCount,
-      time24MismatchVsDepartureAt: state.time24MismatchCount,
-      dateInvalidExcluded: state.dateInvalidExcludedFromConsistency,
-      time24AbsentExcluded: state.time24AbsentExcluded,
-      consistentDocuments: state.consistentDocs,
+      dateVsDepartureAt: {
+        checked: state.dateCheckedCount,
+        consistent: state.dateConsistentCount,
+        mismatched: state.dateMismatchCount,
+        excludedInvalidDate:
+          state.dateInvalidExcludedFromConsistency,
+        excludedNoValidDepartureAt:
+          state.dateNoValidDepartureAtExcluded,
+      },
+      time24VsDepartureAt: {
+        comparable: state.time24ComparableCount,
+        consistent: state.time24ConsistentCount,
+        mismatched: state.time24MismatchCount,
+        excludedTime24AbsentOrEmpty:
+          state.time24AbsentExcluded,
+      },
+      note:
+        "Denominators: the date check runs for documents with a " +
+        "valid departureAt and valid date; the time24 check runs "
+        + "only for documents where time24 is present and valid. " +
+        "Missing optional time24 is not an error and is excluded " +
+        "from the time24 comparison only.",
       derivedWith: "Intl-based Asia/Manila local date and HH:mm",
     },
 
@@ -976,15 +1079,44 @@ export const finalizeReport = (
     },
 
     historicalCoverage: {
-      earliest: state.dateRange.earliest,
-      latest: state.dateRange.latest,
+      earliestAllTrips: state.dateRange.earliest,
+      latestAllTrips: state.dateRange.latest,
+      earliestDepartedTrips: state.departedDateRange.earliest,
+      latestDepartedTrips: state.departedDateRange.latest,
+      totalTripDateSpanDays,
+      departedTripDateSpanDays,
       distinctDates: state.distinctDates.size,
-      departedCoverageSpanDays: departedSpanDays,
-      distinctDatesWithOccupancyEligible:
+      distinctDatesWithOccupancyEligibleDepartures:
         state.datesWithOccupancyEligible.size,
       occupancyEligibleByWeekday,
       occupancyEligibleByRoute: state.byRoute,
       occupancyEligibleByRouteAndHourSlot: byRouteAndSlot,
+    },
+
+    departureProvenance: {
+      presentAndValid: {
+        label:
+          "Present departureConfirmedAt — timestamp recorded by " +
+          "the newer departure workflow.",
+        ...state.departureProvenance.presentAndValid,
+      },
+      missing: {
+        label:
+          "Missing departureConfirmedAt — possible legacy " +
+          "departure implementation.",
+        ...state.departureProvenance.missing,
+      },
+      presentButInvalid: {
+        label:
+          "Present but invalid departureConfirmedAt — not a " +
+          "usable timestamp (review candidates).",
+        ...state.departureProvenance.presentButInvalid,
+      },
+      note:
+        "Historical indicators only, not absolute proof of how " +
+        "an individual trip was processed. A missing optional " +
+        "timestamp is not an error and does not by itself exclude "
+        + "a record from any eligibility layer.",
     },
 
     forecastReadiness: {
@@ -992,9 +1124,10 @@ export const finalizeReport = (
         "deferred — the owner decides after reviewing the audit results",
       decisionNote: FORECAST_DECISION_NOTE,
       measuredEvidence: {
-        departedCoverageSpanDays: departedSpanDays,
+        totalTripDateSpanDays,
+        departedTripDateSpanDays,
         distinctDates: state.distinctDates.size,
-        distinctDatesWithDepartedOccupancy:
+        distinctDatesWithOccupancyEligibleDepartures:
           state.datesWithOccupancyEligible.size,
         occupancyEligibleDepartedRecords: state.occupancyEligible,
         recordsPerWeekday:

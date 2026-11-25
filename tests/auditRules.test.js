@@ -273,7 +273,9 @@ describe("aggregateRecord", () => {
     aggregateRecord(state, createAuditRecord(data), new Map());
 
     assert.equal(state.dateMismatchCount, 1);
-    assert.equal(state.consistentDocs, 0);
+    assert.equal(state.dateCheckedCount, 1);
+    assert.equal(state.time24AbsentExcluded, 1);
+    assert.equal(state.time24ComparableCount, 0);
     assert.equal(state.distinctDates.has("2026-02-11"), true);
   });
 
@@ -374,12 +376,17 @@ describe("finalizeReport", () => {
       report.forecastReadiness.measuredEvidence;
 
     assert.equal(
-      evidence.departedCoverageSpanDays,
+      evidence.totalTripDateSpanDays,
       20
     );
 
     assert.equal(
-      evidence.distinctDatesWithDepartedOccupancy,
+      evidence.departedTripDateSpanDays,
+      20
+    );
+
+    assert.equal(
+      evidence.distinctDatesWithOccupancyEligibleDepartures,
       21
     );
 
@@ -469,6 +476,280 @@ describe("finalizeReport", () => {
         `Report leaked private value: ${sentinel}`
       );
     });
+  });
+});
+
+// --------------------------------------------------
+// PHASE 1.1 — DATE SPANS, DENOMINATORS, PROVENANCE
+// --------------------------------------------------
+
+describe("date coverage spans", () => {
+  it("separates total trip span from departed trip span", () => {
+    const records = [
+      {
+        ...baseDepartedTrip(),
+        status: "Waiting",
+        date: "2026-02-11",
+        departureAt: ts("2026-02-11T09:30:00+08:00"),
+      },
+      {
+        ...baseDepartedTrip(),
+        date: "2026-02-15",
+        plateNumber: "VANA1",
+        departureAt: ts("2026-02-15T09:30:00+08:00"),
+      },
+      {
+        ...baseDepartedTrip(),
+        date: "2026-02-18",
+        plateNumber: "VANA2",
+        departureAt: ts("2026-02-18T09:30:00+08:00"),
+      },
+    ];
+
+    const state = createAuditState();
+
+    records.forEach((data) => {
+      aggregateRecord(
+        state,
+        createAuditRecord(data),
+        new Map()
+      );
+    });
+
+    const finalized = finalizeReport(state, {
+      auditStartedAt: new Date(),
+      auditCompletedAt: new Date(),
+      countBefore: null,
+      countAfter: null,
+      fleetSize: 0,
+    });
+
+    const coverage = finalized.historicalCoverage;
+
+    assert.equal(coverage.earliestAllTrips, "2026-02-11");
+    assert.equal(coverage.latestAllTrips, "2026-02-18");
+    assert.equal(coverage.totalTripDateSpanDays, 7);
+
+    assert.equal(
+      coverage.earliestDepartedTrips,
+      "2026-02-15"
+    );
+    assert.equal(
+      coverage.latestDepartedTrips,
+      "2026-02-18"
+    );
+    assert.equal(
+      coverage.departedTripDateSpanDays,
+      3
+    );
+
+    assert.equal(
+      coverage.distinctDatesWithOccupancyEligibleDepartures,
+      2
+    );
+  });
+});
+
+describe("time-consistency denominators", () => {
+  it("tracks checked, consistent, mismatched, and excluded counts", () => {
+    const state = createAuditState();
+
+    const consistentDoc = baseDepartedTrip();
+
+    const dateMismatchedDoc = {
+      ...baseDepartedTrip(),
+      plateNumber: "VANB1",
+      time24: "10:30",
+      departureAt: ts("2026-02-11T21:30:00-05:00"),
+    };
+
+    const time24AbsentDoc = {
+      ...baseDepartedTrip(),
+      plateNumber: "VANB2",
+      departureAt: ts("2026-02-11T09:30:00+08:00"),
+    };
+    delete time24AbsentDoc.time24;
+
+    const noDepartureAtDoc = {
+      ...baseDepartedTrip(),
+      plateNumber: "VANB3",
+      departureAt: "not-a-timestamp",
+    };
+
+    [
+      consistentDoc,
+      dateMismatchedDoc,
+      time24AbsentDoc,
+      noDepartureAtDoc,
+    ].forEach((data) => {
+      aggregateRecord(
+        state,
+        createAuditRecord(data),
+        new Map()
+      );
+    });
+
+    assert.equal(state.dateCheckedCount, 3);
+    assert.equal(state.dateConsistentCount, 2);
+    assert.equal(state.dateMismatchCount, 1);
+    assert.equal(
+      state.dateInvalidExcludedFromConsistency,
+      0
+    );
+    assert.equal(
+      state.dateNoValidDepartureAtExcluded,
+      1
+    );
+
+    assert.equal(state.time24ComparableCount, 2);
+    assert.equal(state.time24ConsistentCount, 2);
+    assert.equal(state.time24MismatchCount, 0);
+    assert.equal(state.time24AbsentExcluded, 1);
+
+    assert.equal(
+      state.missingRequiredCounts.time24,
+      undefined
+    );
+    assert.equal(
+      state.optionalInvalidCounts.time24,
+      undefined
+    );
+  });
+});
+
+describe("departure provenance indicators", () => {
+  it("groups departed documents by departureConfirmedAt state", () => {
+    const state = createAuditState();
+
+    const legacyDoc = baseDepartedTrip();
+    delete legacyDoc.departureConfirmedAt;
+    delete legacyDoc.time24;
+    legacyDoc.plateNumber = "VANC1";
+
+    const modernViolatingDoc = {
+      ...baseDepartedTrip(),
+      plateNumber: "VANC2",
+      departureConfirmedAt: ts(
+        "2026-02-11T09:35:00+08:00"
+      ),
+      seatsTaken: 11,
+    };
+
+    const modernValidDoc = {
+      ...baseDepartedTrip(),
+      plateNumber: "VANC3",
+      departureConfirmedAt: ts(
+        "2026-02-11T09:35:00+08:00"
+      ),
+    };
+
+    const weirdTimestampDoc = {
+      ...baseDepartedTrip(),
+      plateNumber: "VANC4",
+      departureConfirmedAt: "not-a-timestamp",
+    };
+
+    [
+      legacyDoc,
+      modernViolatingDoc,
+      modernValidDoc,
+      weirdTimestampDoc,
+    ].forEach((data) => {
+      aggregateRecord(
+        state,
+        createAuditRecord(data),
+        new Map()
+      );
+    });
+
+    const provenance = state.departureProvenance;
+
+    assert.equal(provenance.missing.documents, 1);
+    assert.equal(
+      provenance.missing.occupancyEligible,
+      1
+    );
+    assert.equal(
+      provenance.missing.invariantViolations,
+      0
+    );
+
+    assert.equal(
+      provenance.presentAndValid.documents,
+      2
+    );
+    assert.equal(
+      provenance.presentAndValid.occupancyEligible,
+      1
+    );
+    assert.equal(
+      provenance.presentAndValid.invariantViolations,
+      1
+    );
+
+    assert.equal(
+      provenance.presentButInvalid.documents,
+      1
+    );
+    assert.equal(
+      provenance.presentButInvalid.occupancyEligible,
+      1
+    );
+    assert.equal(
+      provenance.presentButInvalid.invariantViolations,
+      0
+    );
+  });
+
+  it("reports provenance labels without personal or raw data", () => {
+    const state = createAuditState();
+
+    aggregateRecord(
+      state,
+      createAuditRecord({
+        ...baseDepartedTrip(),
+        departureConfirmedAt: ts(
+          "2026-02-11T09:35:00+08:00"
+        ),
+      }),
+      new Map()
+    );
+
+    const report = finalizeReport(state, {
+      auditStartedAt: new Date(),
+      auditCompletedAt: new Date(),
+      countBefore: null,
+      countAfter: null,
+      fleetSize: 0,
+    });
+
+    const serialized = JSON.stringify(
+      report.departureProvenance
+    );
+
+    ["abc 123", "ABC123", "driver-one", "09170000000"]
+      .forEach((sentinel) => {
+        assert.equal(
+          serialized.includes(sentinel),
+          false
+        );
+      });
+
+    assert.ok(
+      report.departureProvenance.missing.label.includes(
+        "possible legacy"
+      )
+    );
+    assert.ok(
+      report.departureProvenance.presentAndValid.label.includes(
+        "newer departure workflow"
+      )
+    );
+    assert.ok(
+      report.departureProvenance.note.includes(
+        "not absolute proof"
+      )
+    );
   });
 });
 

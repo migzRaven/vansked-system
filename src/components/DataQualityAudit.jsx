@@ -373,33 +373,132 @@ const DataQualityAudit = () => {
           {/* TIME CONSISTENCY */}
 
           <section className="audit-section">
-            <h3>
-              Time Consistency (Asia/Manila)
-            </h3>
-            <p>
-              Date mismatch vs departureAt:{" "}
-              {
-                report.timeConsistency
-                  .dateMismatchVsDepartureAt
-              }
-            </p>
-            <p>
-              time24 mismatch vs departureAt:{" "}
-              {
-                report.timeConsistency
-                  .time24MismatchVsDepartureAt
-              }
-            </p>
-            <p>
-              Excluded from checks — invalid date:{" "}
-              {report.timeConsistency.dateInvalidExcluded},
-              absent time24:{" "}
-              {report.timeConsistency.time24AbsentExcluded}
-            </p>
-            <p>
-              Fully consistent documents:{" "}
-              {report.timeConsistency.consistentDocuments}
-            </p>
+            <h3>Time Consistency (Asia/Manila)</h3>
+
+            <h4 className="audit-subheading">
+              Date vs departureAt
+            </h4>
+            <table className="audit-table">
+              <caption className="sr-only">
+                date versus departureAt checks
+              </caption>
+              <thead>
+                <tr>
+                  <th>Result</th>
+                  <th>Documents</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Checked</td>
+                  <td>
+                    {
+                      report.timeConsistency
+                        .dateVsDepartureAt.checked
+                    }
+                  </td>
+                </tr>
+                <tr>
+                  <td>Consistent</td>
+                  <td>
+                    {
+                      report.timeConsistency
+                        .dateVsDepartureAt.consistent
+                    }
+                  </td>
+                </tr>
+                <tr>
+                  <td>Mismatched</td>
+                  <td>
+                    {
+                      report.timeConsistency
+                        .dateVsDepartureAt.mismatched
+                    }
+                  </td>
+                </tr>
+                <tr>
+                  <td>Excluded — invalid date</td>
+                  <td>
+                    {
+                      report.timeConsistency
+                        .dateVsDepartureAt
+                        .excludedInvalidDate
+                    }
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    Excluded — no valid departureAt
+                  </td>
+                  <td>
+                    {
+                      report.timeConsistency
+                        .dateVsDepartureAt
+                        .excludedNoValidDepartureAt
+                    }
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+
+            <h4 className="audit-subheading">
+              time24 vs departureAt
+            </h4>
+            <table className="audit-table">
+              <caption className="sr-only">
+                time24 versus departureAt checks
+              </caption>
+              <thead>
+                <tr>
+                  <th>Result</th>
+                  <th>Documents</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Comparable (time24 present)</td>
+                  <td>
+                    {
+                      report.timeConsistency
+                        .time24VsDepartureAt.comparable
+                    }
+                  </td>
+                </tr>
+                <tr>
+                  <td>Consistent</td>
+                  <td>
+                    {
+                      report.timeConsistency
+                        .time24VsDepartureAt.consistent
+                    }
+                  </td>
+                </tr>
+                <tr>
+                  <td>Mismatched</td>
+                  <td>
+                    {
+                      report.timeConsistency
+                        .time24VsDepartureAt.mismatched
+                    }
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    Excluded — time24 absent or empty
+                  </td>
+                  <td>
+                    {
+                      report.timeConsistency
+                        .time24VsDepartureAt
+                        .excludedTime24AbsentOrEmpty
+                    }
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <NoteBox>
+              {report.timeConsistency.note}
+            </NoteBox>
           </section>
 
           {/* OCCUPANCY INDICATORS */}
@@ -424,6 +523,43 @@ const DataQualityAudit = () => {
               {
                 report.occupancyReviewIndicators.note
               }
+            </NoteBox>
+          </section>
+
+          {/* DEPARTURE RECORD PROVENANCE */}
+
+          <section className="audit-section">
+            <h3>Departure Record Provenance</h3>
+            <table className="audit-table">
+              <caption className="sr-only">
+                departure provenance groups
+              </caption>
+              <thead>
+                <tr>
+                  <th>Group</th>
+                  <th>Documents</th>
+                  <th>Occupancy-eligible</th>
+                  <th>Invariant violations</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  report.departureProvenance.presentAndValid,
+                  report.departureProvenance.missing,
+                  report.departureProvenance
+                    .presentButInvalid,
+                ].map((group) => (
+                  <tr key={group.label}>
+                    <td>{group.label}</td>
+                    <td>{group.documents}</td>
+                    <td>{group.occupancyEligible}</td>
+                    <td>{group.invariantViolations}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <NoteBox>
+              {report.departureProvenance.note}
             </NoteBox>
           </section>
 
@@ -461,18 +597,50 @@ const DataQualityAudit = () => {
           <section className="audit-section">
             <h3>Historical Coverage</h3>
             <p>
-              Departed coverage span:{" "}
+              Total trip date span (all documents):{" "}
               {
                 report.historicalCoverage
-                  .departedCoverageSpanDays
+                  .totalTripDateSpanDays
               }{" "}
-              day(s), across{" "}
+              day(s){" "}
+              (
+              {
+                report.historicalCoverage.earliestAllTrips
+              }{" "}
+              to{" "}
+              {
+                report.historicalCoverage.latestAllTrips
+              }
+              ).
+            </p>
+            <p>
+              Departed trip date span (Departed documents
+              only):{" "}
               {
                 report.historicalCoverage
-                  .distinctDatesWithOccupancyEligible
+                  .departedTripDateSpanDays
               }{" "}
-              distinct date(s) with occupancy-eligible
-              records.
+              day(s){" "}
+              (
+              {
+                report.historicalCoverage
+                  .earliestDepartedTrips
+              }{" "}
+              to{" "}
+              {
+                report.historicalCoverage
+                  .latestDepartedTrips
+              }
+              ).
+            </p>
+            <p>
+              Distinct dates with occupancy-eligible
+              departures:{" "}
+              {
+                report.historicalCoverage
+                  .distinctDatesWithOccupancyEligibleDepartures
+              }
+              .
             </p>
 
             <h4 className="audit-subheading">
