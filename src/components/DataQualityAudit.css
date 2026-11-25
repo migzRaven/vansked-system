@@ -1,0 +1,167 @@
+/* Data Quality Audit styles. Tokens are loaded
+   globally by App.css. */
+
+.audit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.audit-run-btn,
+.audit-export-btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: var(--radius);
+  background: var(--navy-700);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.audit-run-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.audit-export-btn {
+  background: var(--amber);
+  color: var(--navy-900);
+}
+
+.audit-progress {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.audit-report {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.audit-section {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 16px 18px;
+}
+
+.audit-section h3 {
+  margin: 0 0 10px;
+  font-size: 16px;
+  color: var(--navy-900);
+}
+
+.audit-section p {
+  margin: 6px 0;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.audit-subheading {
+  margin: 14px 0 8px;
+  font-size: 14px;
+  color: var(--navy-700);
+}
+
+.audit-kpis {
+  display: grid;
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(140px, 1fr)
+  );
+  gap: 12px;
+}
+
+.audit-kpi {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px;
+  text-align: center;
+}
+
+.audit-kpi h4 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.audit-kpi p {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--navy-900);
+}
+
+.audit-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-size: 14px;
+}
+
+.audit-table th,
+.audit-table td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.audit-table th {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+}
+
+.audit-table caption.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.audit-note {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: var(--bg);
+  border-left: 3px solid var(--amber);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.audit-ok {
+  font-size: 14px;
+  color: var(--boarding);
+  font-weight: 600;
+}
+
+.audit-verdict {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--navy-900);
+}
+
+.audit-section ul {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  font-size: 14px;
+  color: var(--text);
+}
+
+@media (max-width: 600px) {
+  .audit-table th,
+  .audit-table td {
+    padding: 6px 8px;
+    font-size: 13px;
+  }
+}

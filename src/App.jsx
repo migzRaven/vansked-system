@@ -59,6 +59,10 @@ const PublicTripMigration = lazy(
   () => import("./components/PublicTripMigration")
 );
 
+const DataQualityAudit = lazy(
+  () => import("./components/DataQualityAudit")
+);
+
 const Login = lazy(
   () => import("./components/Login")
 );
@@ -413,6 +417,13 @@ const Navigation = ({ pathname }) => {
                     >
                       Public Migration
                     </Link>
+
+                    <Link
+                      to="/audit"
+                      className="nav-link"
+                    >
+                      Data Quality Audit
+                    </Link>
                   </>
                 )}
 
@@ -545,6 +556,14 @@ const Navigation = ({ pathname }) => {
                     onClick={closeDrawer}
                   >
                     Public Trip Migration
+                  </Link>
+
+                  <Link
+                    to="/audit"
+                    className="drawer-link"
+                    onClick={closeDrawer}
+                  >
+                    Data Quality Audit
                   </Link>
                 </>
               )}
@@ -894,6 +913,17 @@ const AppContent = () => {
                 ]}
               >
                 <AnalyticsView />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/audit"
+            element={
+              <ProtectedRoute
+                allowedRoles={["admin"]}
+              >
+                <DataQualityAudit />
               </ProtectedRoute>
             }
           />
