@@ -1373,6 +1373,76 @@ test("VanSked Firestore Security Rules", async (t) => {
       }
     );
 
+    // ISOLATION DIAGNOSTICS. These cases separate
+    // the individual list-rule constraints so a
+    // failing run pinpoints which one the proof
+    // engine rejects. Expected outcomes below are
+    // the mandated security semantics: a dispatcher
+    // list succeeds only with BOTH timestamp bounds
+    // AND a limit of at most 50.
+
+    await t.test(
+      "Isolation: dispatcher list with only the lower timestamp bound is denied",
+      async () => {
+        await assertFails(
+          getDocs(
+            query(
+              collection(dispatcherDb, "trip_events"),
+              where("timestamp", ">=", Timestamp.fromMillis(manilaDayStartMs())),
+              orderBy("timestamp", "desc"),
+              limit(50)
+            )
+          )
+        );
+      }
+    );
+
+    await t.test(
+      "Isolation: dispatcher list with only the upper timestamp bound is denied",
+      async () => {
+        await assertFails(
+          getDocs(
+            query(
+              collection(dispatcherDb, "trip_events"),
+              where("timestamp", "<", Timestamp.fromMillis(manilaDayEndMs())),
+              limit(50)
+            )
+          )
+        );
+      }
+    );
+
+    await t.test(
+      "Isolation: dispatcher list with both timestamp bounds and limit 50 (no orderBy) succeeds",
+      async () => {
+        await assertSucceeds(
+          getDocs(
+            query(
+              collection(dispatcherDb, "trip_events"),
+              where("timestamp", ">=", Timestamp.fromMillis(manilaDayStartMs())),
+              where("timestamp", "<", Timestamp.fromMillis(manilaDayEndMs())),
+              limit(50)
+            )
+          )
+        );
+      }
+    );
+
+    await t.test(
+      "Isolation: dispatcher list with both timestamp bounds and no orderBy or limit is denied",
+      async () => {
+        await assertFails(
+          getDocs(
+            query(
+              collection(dispatcherDb, "trip_events"),
+              where("timestamp", ">=", Timestamp.fromMillis(manilaDayStartMs())),
+              where("timestamp", "<", Timestamp.fromMillis(manilaDayEndMs()))
+            )
+          )
+        );
+      }
+    );
+
     await t.test(
       "Dispatcher cannot query events without a limit",
       async () => {
