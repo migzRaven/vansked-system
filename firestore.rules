@@ -39,6 +39,37 @@ service cloud.firestore {
         && staffData().get('role', '') == 'admin';
     }
 
+    function isDispatcher() {
+      return isActiveStaff()
+        && staffData().get('role', '') == 'dispatcher';
+    }
+
+    // =========================================
+    // ASIA/MANILA DATE HELPERS
+    // =========================================
+
+    // Rules timestamps expose UTC components only.
+    // Asia/Manila is a fixed UTC+8 offset with no
+    // daylight saving, so shifting request.time
+    // forward by 8 hours yields Manila local
+    // calendar components. Server request.time is
+    // the authoritative operational date source;
+    // client-supplied dates are never trusted.
+
+    function zeroPadded(value) {
+      return value < 10
+        ? '0' + string(value)
+        : string(value);
+    }
+
+    function manilaTodayString() {
+      return string((request.time + duration.value(8, 'h')).year())
+        + '-'
+        + zeroPadded((request.time + duration.value(8, 'h')).month())
+        + '-'
+        + zeroPadded((request.time + duration.value(8, 'h')).day());
+    }
+
     // =========================================
     // DOCUMENT PATH HELPERS
     // =========================================
@@ -325,11 +356,31 @@ service cloud.firestore {
 
     match /trips/{tripId} {
 
-      allow read: if isActiveStaff();
+      // Dispatchers may operate on today's Manila
+      // calendar date only. Historical records are
+      // restricted to administrators. The
+      // operational date always comes from server
+      // request.time, never from client data.
+
+      allow get: if isActiveStaff()
+        && (
+          isAdmin()
+          || resource.data.date == manilaTodayString()
+        );
+
+      allow list: if isActiveStaff()
+        && (
+          isAdmin()
+          || resource.data.date == manilaTodayString()
+        );
 
       // Creating a private trip requires a matching
       // public passenger record in the same transaction.
       allow create: if isActiveStaff()
+        && (
+          isAdmin()
+          || request.resource.data.date == manilaTodayString()
+        )
         && validTrip(request.resource.data)
         && hasMatchingPublicTrip(
           tripId,
@@ -338,7 +389,17 @@ service cloud.firestore {
 
       // Updating a private trip also requires the
       // matching public projection to be updated.
+      // Dispatchers cannot modify or resurface
+      // historical records: both the existing and
+      // the resulting document must be today's date.
       allow update: if isActiveStaff()
+        && (
+          isAdmin()
+          || (
+            resource.data.date == manilaTodayString()
+            && request.resource.data.date == manilaTodayString()
+          )
+        )
         && validTrip(request.resource.data)
         && validStatusTransition()
         && request.resource.data.diff(resource.data)
@@ -368,8 +429,14 @@ service cloud.firestore {
 
       // Deletion requires removal of the public
       // passenger projection in the same transaction.
-      // Departed trips cannot be deleted.
+      // Departed trips cannot be deleted from the
+      // client, and dispatchers can only delete
+      // today's trips.
       allow delete: if isActiveStaff()
+        && (
+          isAdmin()
+          || resource.data.date == manilaTodayString()
+        )
         && resource.data.status != 'Departed'
         && !existsAfter(publicTripPath(tripId));
     }
@@ -408,12 +475,77 @@ service cloud.firestore {
     }
 
     // =========================================
+    // ASIA/MANILA DAY INTERVAL (TIMESTAMPS)
+    // =========================================
+
+    // Manila wall-clock time of day, in whole
+    // seconds, derived from the UTC components of
+    // the fixed UTC+8-shifted request time.
+
+    function manilaSecondsIntoDay() {
+      return (request.time + duration.value(8, 'h')).hours() * 3600
+        + (request.time + duration.value(8, 'h')).minutes() * 60
+        + (request.time + duration.value(8, 'h')).seconds();
+    }
+
+    // Start of the current Manila calendar day as
+    // a UTC timestamp. Firestore timestamps carry
+    // nanosecond precision: the whole-second
+    // subtraction alone would leave request.time's
+    // fractional nanoseconds in the boundary, so
+    // the sub-second component is removed as well.
+
+    function manilaDayStart() {
+      return request.time
+        - duration.value(manilaSecondsIntoDay(), 's')
+        - duration.value(request.time.nanos(), 'ns');
+    }
+
+    // Exclusive start of the following Manila day.
+
+    function manilaDayEnd() {
+      return manilaDayStart() + duration.value(86400, 's');
+    }
+
+    // =========================================
     // TRIP EVENT AUDIT LOGS
     // =========================================
 
     match /trip_events/{eventId} {
 
-      allow read: if isActiveStaff();
+      // Dispatchers may only access events recorded
+      // during the current Manila calendar day.
+      // Historical events are admin-only. Missing or
+      // invalid timestamps fail closed.
+
+      function dispatcherOperationalEvent(data) {
+        return isDispatcher()
+          && data.timestamp is timestamp
+          && data.timestamp >= manilaDayStart()
+          && data.timestamp < manilaDayEnd();
+      }
+
+      allow get: if isActiveStaff()
+        && (
+          isAdmin()
+          || dispatcherOperationalEvent(resource.data)
+        );
+
+      // The list rule additionally requires a query
+      // limit of at most 50. The limit caps the size
+      // of an individual query; the timestamp
+      // interval above is the actual historical-read
+      // restriction. Queries without a limit are
+      // denied for dispatchers.
+
+      allow list: if isActiveStaff()
+        && (
+          isAdmin()
+          || (
+            dispatcherOperationalEvent(resource.data)
+            && request.query.limit <= 50
+          )
+        );
 
       allow create: if isActiveStaff()
         && request.resource.data.keys().hasAll([
@@ -581,12 +713,16 @@ service cloud.firestore {
 
     match /schedule_groups/{groupId} {
 
+      // Templates stay readable by active staff so
+      // dispatchers can generate trips from them,
+      // but template management is admin-only.
+
       allow read: if isActiveStaff();
 
-      allow create, update: if isActiveStaff()
+      allow create, update: if isAdmin()
         && validScheduleGroup(request.resource.data);
 
-      allow delete: if isActiveStaff();
+      allow delete: if isAdmin();
     }
 
     // =========================================
@@ -629,12 +765,15 @@ service cloud.firestore {
 
     match /schedule_groups/{groupId}/trips/{tripId} {
 
+      // Nested template trips follow the group
+      // permissions: all staff read, admin-only write.
+
       allow read: if isActiveStaff();
 
-      allow create, update: if isActiveStaff()
+      allow create, update: if isAdmin()
         && validTemplateTrip(request.resource.data);
 
-      allow delete: if isActiveStaff();
+      allow delete: if isAdmin();
     }
 
     // =========================================

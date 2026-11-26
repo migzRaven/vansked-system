@@ -11,14 +11,27 @@ import {
 
 import {
   Timestamp,
+  collection,
   deleteDoc,
   doc,
+  documentId,
   getDoc,
+  getDocs,
+  limit,
+  orderBy,
+  query,
   serverTimestamp,
   setDoc,
   updateDoc,
+  where,
   writeBatch
 } from "firebase/firestore";
+
+import {
+  manilaCalendarDate,
+  manilaDayEndMs,
+  manilaDayStartMs,
+} from "./helpers/manilaDate.js";
 
 // =============================================
 // CONFIGURATION
@@ -35,6 +48,27 @@ const INACTIVE_UID = "rules-test-inactive";
 const TEST_TIMESTAMP = Timestamp.fromDate(
   new Date("2026-11-22T00:00:00Z")
 );
+
+// =============================================
+// MANILA DATE FIXTURES
+// =============================================
+
+// The security rules derive the operational date
+// from server request.time, and the emulator
+// cannot control that clock. Tests that exercise
+// dispatcher access therefore use fixture trips
+// dated with the locally computed Manila calendar
+// date. A canary test asserts server and fixture
+// agreement; running the suite within seconds of
+// Manila midnight could produce a false failure.
+
+const MANILA_TODAY = manilaCalendarDate(0);
+const MANILA_YESTERDAY = manilaCalendarDate(-1);
+const MANILA_TOMORROW = manilaCalendarDate(1);
+
+function createTodayTrip(overrides = {}) {
+  return createTrip({ date: MANILA_TODAY, ...overrides });
+}
 
 let testEnv;
 
@@ -57,16 +91,42 @@ const TEST_PATHS = [
   "trips/rules-test-paired-create",
   "trips/rules-test-unpaired-create",
 
+  `trips/rules-test-today-read`,
+  `trips/rules-test-today-update`,
+  `trips/rules-test-today-private-only-update`,
+  `trips/rules-test-today-departed`,
+  `trips/rules-test-today-delete`,
+  `trips/rules-test-today-private-only-delete`,
+  `trips/rules-test-today-paired-create`,
+  `trips/rules-test-yesterday-read`,
+  `trips/rules-test-future-create`,
+
   "fleet/rules-test-vehicle",
   "fares/rules-test-fare",
 
-  "schedule_groups/rules-test-group",
+  "public_trips/rules-test-future-create",
+  `public_trips/rules-test-today-read`,
+  `public_trips/rules-test-today-update`,
+  `public_trips/rules-test-today-private-only-update`,
+  `public_trips/rules-test-today-departed`,
+  `public_trips/rules-test-today-delete`,
+  `public_trips/rules-test-today-private-only-delete`,
+  `public_trips/rules-test-yesterday-read`,
+  `schedule_groups/rules-test-group`,
+  `schedule_groups/rules-test-new-group`,
 
   "schedule_groups/rules-test-group/trips/rules-test-template",
 
+  "trips/rules-test-fare-specific",
+  "public_trips/rules-test-fare-specific",
   "trip_events/rules-test-created-event",
   "trip_events/rules-test-wrong-actor",
   "trip_events/rules-test-existing-event",
+  "trip_events/rules-test-yesterday-event",
+  "trip_events/rules-test-boundary-start",
+  "trip_events/rules-test-boundary-start-minus-1ns",
+  "trip_events/rules-test-boundary-start-plus-1ns",
+  "trip_events/rules-test-boundary-next-midnight",
 
   "public_trips/rules-test-private-read",
   "public_trips/rules-test-dispatcher-update",
@@ -77,6 +137,7 @@ const TEST_PATHS = [
   "public_trips/rules-test-public",
   "public_trips/rules-test-paired-create",
   "public_trips/rules-test-unpaired-create",
+  "public_trips/rules-test-today-paired-create",
   "public_trips/unauthorized-test"
 ];
 
@@ -247,6 +308,51 @@ async function setupTestData() {
       createTrip()
     );
 
+    // TODAY-DATED PAIRS (dispatcher scope) AND
+    // YESTERDAY-DATED HISTORICAL PAIR
+
+    await seedTripPair(
+      db,
+      "rules-test-today-read",
+      createTodayTrip()
+    );
+
+    await seedTripPair(
+      db,
+      "rules-test-today-update",
+      createTodayTrip()
+    );
+
+    await seedTripPair(
+      db,
+      "rules-test-today-private-only-update",
+      createTodayTrip()
+    );
+
+    await seedTripPair(
+      db,
+      "rules-test-today-departed",
+      createTodayTrip({ status: "Departed" })
+    );
+
+    await seedTripPair(
+      db,
+      "rules-test-today-delete",
+      createTodayTrip()
+    );
+
+    await seedTripPair(
+      db,
+      "rules-test-today-private-only-delete",
+      createTodayTrip()
+    );
+
+    await seedTripPair(
+      db,
+      "rules-test-yesterday-read",
+      createTrip({ date: MANILA_YESTERDAY })
+    );
+
     // FLEET
 
     await setDoc(
@@ -281,7 +387,82 @@ async function setupTestData() {
       }
     );
 
-    // EXISTING AUDIT EVENT
+    // EXISTING AUDIT EVENT (historical by server-
+    // timestamp fixture, not by dynamic name)
+
+    // Yesterday Manila event for event-scope tests.
+
+    await setDoc(
+      doc(db, "trip_events/rules-test-yesterday-event"),
+      {
+        action: "Status changed to Departed",
+        driver: "Juan",
+        route: "St. Bernard to Tacloban",
+        timestamp: Timestamp.fromMillis(
+          Date.now() - 24 * 60 * 60 * 1000
+        ),
+        tripId: "rules-test-private-read"
+      }
+    );
+
+    // MANILA MIDNIGHT BOUNDARY EVENTS relative to
+    // the actual current Manila calendar date.
+    // Exact seconds/nanoseconds instances exercise
+    // the rule interval's inclusive start and
+    // exclusive end, including sub-millisecond
+    // offsets. Assuming the suite does not run
+    // across Manila midnight, dayStartSeconds is
+    // the current Manila day and next midnight is
+    // one day later.
+
+    const dayStartSeconds = Math.floor(
+      manilaDayStartMs() / 1000
+    );
+
+    const boundaryEvent = (timestamp) => ({
+      action: "Boundary check",
+      driver: "Juan",
+      route: "St. Bernard to Tacloban",
+      timestamp,
+      tripId: "rules-test-private-read"
+    });
+
+    await setDoc(
+      doc(db, "trip_events/rules-test-boundary-start"),
+      boundaryEvent(
+        new Timestamp(dayStartSeconds, 0)
+      )
+    );
+
+    await setDoc(
+      doc(
+        db,
+        "trip_events/rules-test-boundary-start-minus-1ns"
+      ),
+      boundaryEvent(
+        new Timestamp(dayStartSeconds - 1, 999999999)
+      )
+    );
+
+    await setDoc(
+      doc(
+        db,
+        "trip_events/rules-test-boundary-start-plus-1ns"
+      ),
+      boundaryEvent(
+        new Timestamp(dayStartSeconds, 1)
+      )
+    );
+
+    await setDoc(
+      doc(
+        db,
+        "trip_events/rules-test-boundary-next-midnight"
+      ),
+      boundaryEvent(
+        new Timestamp(dayStartSeconds + 86400, 0)
+      )
+    );
 
     await setDoc(
       doc(db, "trip_events/rules-test-existing-event"),
@@ -449,9 +630,37 @@ test("VanSked Firestore Security Rules", async (t) => {
     // -----------------------------------------
 
     await t.test(
-      "Dispatcher can read private trips",
+      "Dispatcher can get today's private trip",
       async () => {
         await assertSucceeds(
+          readDocument(
+            dispatcherDb,
+            "trips/rules-test-today-read"
+          )
+        );
+      }
+    );
+
+    await t.test(
+      "Dispatcher can query today's trips",
+      async () => {
+        const snapshot = await assertSucceeds(
+          getDocs(
+            query(
+              collection(dispatcherDb, "trips"),
+              where("date", "==", MANILA_TODAY)
+            )
+          )
+        );
+
+        assert.ok(snapshot.size >= 1);
+      }
+    );
+
+    await t.test(
+      "Dispatcher cannot get a historical trip by document ID",
+      async () => {
+        await assertFails(
           readDocument(
             dispatcherDb,
             "trips/rules-test-private-read"
@@ -461,18 +670,131 @@ test("VanSked Firestore Security Rules", async (t) => {
     );
 
     await t.test(
-      "Dispatcher can update private and public trips together",
+      "Dispatcher cannot get yesterday's trip",
+      async () => {
+        await assertFails(
+          readDocument(
+            dispatcherDb,
+            "trips/rules-test-yesterday-read"
+          )
+        );
+      }
+    );
+
+    await t.test(
+      "Dispatcher cannot query yesterday's date",
+      async () => {
+        await assertFails(
+          getDocs(
+            query(
+              collection(dispatcherDb, "trips"),
+              where("date", "==", MANILA_YESTERDAY)
+            )
+          )
+        );
+      }
+    );
+
+    await t.test(
+      "Dispatcher cannot query tomorrow's date",
+      async () => {
+        await assertFails(
+          getDocs(
+            query(
+              collection(dispatcherDb, "trips"),
+              where("date", "==", MANILA_TOMORROW)
+            )
+          )
+        );
+      }
+    );
+
+    await t.test(
+      "Dispatcher cannot query historical date ranges",
+      async () => {
+        await assertFails(
+          getDocs(
+            query(
+              collection(dispatcherDb, "trips"),
+              where("date", ">=", MANILA_YESTERDAY),
+              where("date", "<=", MANILA_TODAY)
+            )
+          )
+        );
+      }
+    );
+
+    await t.test(
+      "Dispatcher cannot run the unfiltered historical audit sweep",
+      async () => {
+        await assertFails(
+          getDocs(
+            query(
+              collection(dispatcherDb, "trips"),
+              orderBy(documentId())
+            )
+          )
+        );
+      }
+    );
+
+    await t.test(
+      "Administrator can read yesterday's trip",
+      async () => {
+        await assertSucceeds(
+          readDocument(
+            adminDb,
+            "trips/rules-test-yesterday-read"
+          )
+        );
+      }
+    );
+
+    await t.test(
+      "Administrator can query historical date ranges",
+      async () => {
+        await assertSucceeds(
+          getDocs(
+            query(
+              collection(adminDb, "trips"),
+              where("date", ">=", MANILA_YESTERDAY),
+              where("date", "<=", MANILA_TODAY)
+            )
+          )
+        );
+      }
+    );
+
+    await t.test(
+      "Administrator can run the unfiltered historical audit sweep",
+      async () => {
+        const pageOne = await assertSucceeds(
+          getDocs(
+            query(
+              collection(adminDb, "trips"),
+              orderBy(documentId()),
+              limit(2)
+            )
+          )
+        );
+
+        assert.ok(pageOne.size >= 1);
+      }
+    );
+
+    await t.test(
+      "Dispatcher can update today's private and public trips together",
       async () => {
         const batch = writeBatch(dispatcherDb);
 
         const tripRef = doc(
           dispatcherDb,
-          "trips/rules-test-dispatcher-update"
+          "trips/rules-test-today-update"
         );
 
         const publicTripRef = doc(
           dispatcherDb,
-          "public_trips/rules-test-dispatcher-update"
+          "public_trips/rules-test-today-update"
         );
 
         // Reuse the same server timestamp transform
@@ -497,7 +819,26 @@ test("VanSked Firestore Security Rules", async (t) => {
     );
 
     await t.test(
-      "Dispatcher cannot update a private trip without updating its public record",
+      "Dispatcher cannot update a today trip without updating its public record",
+      async () => {
+        await assertFails(
+          updateDoc(
+            doc(
+              dispatcherDb,
+              "trips/rules-test-today-private-only-update"
+            ),
+            {
+              status: "Boarding",
+              vacantSeats: 0,
+              updatedAt: serverTimestamp()
+            }
+          )
+        );
+      }
+    );
+
+    await t.test(
+      "Dispatcher cannot update a historical trip by document ID",
       async () => {
         await assertFails(
           updateDoc(
@@ -516,13 +857,31 @@ test("VanSked Firestore Security Rules", async (t) => {
     );
 
     await t.test(
+      "Dispatcher cannot move a historical trip into today",
+      async () => {
+        await assertFails(
+          updateDoc(
+            doc(
+              dispatcherDb,
+              "trips/rules-test-private-only-update"
+            ),
+            {
+              date: MANILA_TODAY,
+              updatedAt: serverTimestamp()
+            }
+          )
+        );
+      }
+    );
+
+    await t.test(
       "Dispatcher cannot publish mismatched passenger information",
       async () => {
         await assertFails(
           updateDoc(
             doc(
               dispatcherDb,
-              "public_trips/rules-test-private-only-update"
+              "public_trips/rules-test-today-private-only-update"
             ),
             {
               status: "Boarding"
@@ -536,7 +895,7 @@ test("VanSked Firestore Security Rules", async (t) => {
       "Dispatcher cannot create a public record without a private trip",
       async () => {
         const publicData = createPublicTrip(
-          createTrip()
+          createTodayTrip()
         );
 
         await assertFails(
@@ -636,15 +995,104 @@ test("VanSked Firestore Security Rules", async (t) => {
     // -----------------------------------------
 
     await t.test(
-      "Dispatcher can create nested schedule templates",
+      "Dispatcher can read schedule groups",
       async () => {
-        await assertSucceeds(
+        const snapshot = await assertSucceeds(
+          getDocs(
+            collection(dispatcherDb, "schedule_groups")
+          )
+        );
+
+        assert.ok(snapshot.size >= 1);
+      }
+    );
+
+    await t.test(
+      "Dispatcher can read nested template trips",
+      async () => {
+        const snapshot = await assertSucceeds(
+          getDocs(
+            collection(
+              dispatcherDb,
+              "schedule_groups/rules-test-group/trips"
+            )
+          )
+        );
+
+        assert.ok(snapshot.size >= 0);
+      }
+    );
+
+    await t.test(
+      "Dispatcher cannot create nested schedule templates",
+      async () => {
+        await assertFails(
           setDoc(
             doc(
               dispatcherDb,
               "schedule_groups/rules-test-group/trips/rules-test-template"
             ),
             scheduleTripFixture
+          )
+        );
+      }
+    );
+
+    await t.test(
+      "Dispatcher cannot create schedule groups",
+      async () => {
+        await assertFails(
+          setDoc(doc(dispatcherDb, "schedule_groups/rules-test-new-group"), {
+            name: "Unauthorized Group",
+            days: {
+              Mon: true,
+              Tue: true,
+              Wed: true,
+              Thu: true,
+              Fri: true,
+              Sat: true,
+              Sun: true
+            }
+          })
+        );
+      }
+    );
+
+    await t.test(
+      "Dispatcher cannot delete schedule groups",
+      async () => {
+        await assertFails(
+          deleteDoc(
+            doc(dispatcherDb, "schedule_groups/rules-test-group")
+          )
+        );
+      }
+    );
+
+    await t.test(
+      "Administrator can create nested schedule templates",
+      async () => {
+        await assertSucceeds(
+          setDoc(
+            doc(
+              adminDb,
+              "schedule_groups/rules-test-group/trips/rules-test-template"
+            ),
+            scheduleTripFixture
+          )
+        );
+      }
+    );
+
+    await t.test(
+      "Administrator can update schedule groups",
+      async () => {
+        await assertSucceeds(
+          updateDoc(
+            doc(adminDb, "schedule_groups/rules-test-group"),
+            {
+              name: "Renamed Security Test Group"
+            }
           )
         );
       }
@@ -663,7 +1111,7 @@ test("VanSked Firestore Security Rules", async (t) => {
               dispatcherDb,
               "trips/rules-test-invalid-create"
             ),
-            createTrip({
+            createTodayTrip({
               capacity: "14"
             })
           )
@@ -678,12 +1126,12 @@ test("VanSked Firestore Security Rules", async (t) => {
 
         const tripRef = doc(
           dispatcherDb,
-          "trips/rules-test-departed"
+          "trips/rules-test-today-departed"
         );
 
         const publicTripRef = doc(
           dispatcherDb,
-          "public_trips/rules-test-departed"
+          "public_trips/rules-test-today-departed"
         );
 
         const updatedAt = serverTimestamp();
@@ -709,23 +1157,23 @@ test("VanSked Firestore Security Rules", async (t) => {
     // -----------------------------------------
 
     await t.test(
-      "Dispatcher can create private and public trips together",
+      "Dispatcher can create today's private and public trips together",
       async () => {
         const batch = writeBatch(dispatcherDb);
 
         const tripRef = doc(
           dispatcherDb,
-          "trips/rules-test-paired-create"
+          "trips/rules-test-today-paired-create"
         );
 
         const publicTripRef = doc(
           dispatcherDb,
-          "public_trips/rules-test-paired-create"
+          "public_trips/rules-test-today-paired-create"
         );
 
         const updatedAt = serverTimestamp();
 
-        const tripData = createTrip({
+        const tripData = createTodayTrip({
           updatedAt,
           createdAt: updatedAt
         });
@@ -750,7 +1198,7 @@ test("VanSked Firestore Security Rules", async (t) => {
               dispatcherDb,
               "trips/rules-test-unpaired-create"
             ),
-            createTrip({
+            createTodayTrip({
               updatedAt: serverTimestamp()
             })
           )
@@ -759,21 +1207,94 @@ test("VanSked Firestore Security Rules", async (t) => {
     );
 
     await t.test(
-      "Dispatcher can delete private and public trips together",
+      "Dispatcher cannot create a trip dated yesterday",
+      async () => {
+        const batch = writeBatch(dispatcherDb);
+
+        const tripData = createTrip({
+          date: MANILA_YESTERDAY,
+          updatedAt: serverTimestamp()
+        });
+
+        batch.set(
+          doc(dispatcherDb, "trips/rules-test-paired-create"),
+          tripData
+        );
+
+        batch.set(
+          doc(dispatcherDb, "public_trips/rules-test-paired-create"),
+          createPublicTrip(tripData)
+        );
+
+        await assertFails(batch.commit());
+      }
+    );
+
+    await t.test(
+      "Dispatcher cannot create a trip dated tomorrow",
+      async () => {
+        const batch = writeBatch(dispatcherDb);
+
+        const tripData = createTrip({
+          date: MANILA_TOMORROW,
+          updatedAt: serverTimestamp()
+        });
+
+        batch.set(
+          doc(dispatcherDb, "trips/rules-test-future-create"),
+          tripData
+        );
+
+        batch.set(
+          doc(dispatcherDb, "public_trips/rules-test-future-create"),
+          createPublicTrip(tripData)
+        );
+
+        await assertFails(batch.commit());
+      }
+    );
+
+    await t.test(
+      "Administrator can create a future-dated paired trip",
+      async () => {
+        const batch = writeBatch(adminDb);
+
+        const tripData = createTrip({
+          date: MANILA_TOMORROW,
+          updatedAt: serverTimestamp(),
+          createdAt: serverTimestamp()
+        });
+
+        batch.set(
+          doc(adminDb, "trips/rules-test-future-create"),
+          tripData
+        );
+
+        batch.set(
+          doc(adminDb, "public_trips/rules-test-future-create"),
+          createPublicTrip(tripData)
+        );
+
+        await assertSucceeds(batch.commit());
+      }
+    );
+
+    await t.test(
+      "Dispatcher can delete today's private and public trips together",
       async () => {
         const batch = writeBatch(dispatcherDb);
 
         batch.delete(
           doc(
             dispatcherDb,
-            "trips/rules-test-delete"
+            "trips/rules-test-today-delete"
           )
         );
 
         batch.delete(
           doc(
             dispatcherDb,
-            "public_trips/rules-test-delete"
+            "public_trips/rules-test-today-delete"
           )
         );
 
@@ -782,16 +1303,287 @@ test("VanSked Firestore Security Rules", async (t) => {
     );
 
     await t.test(
-      "Dispatcher cannot delete a private trip without deleting its public record",
+      "Dispatcher cannot delete a today trip without deleting its public record",
       async () => {
         await assertFails(
           deleteDoc(
             doc(
               dispatcherDb,
-              "trips/rules-test-private-only-delete"
+              "trips/rules-test-today-private-only-delete"
             )
           )
         );
+      }
+    );
+
+    await t.test(
+      "Dispatcher cannot delete a historical trip",
+      async () => {
+        const batch = writeBatch(dispatcherDb);
+
+        batch.delete(
+          doc(dispatcherDb, "trips/rules-test-delete")
+        );
+
+        batch.delete(
+          doc(dispatcherDb, "public_trips/rules-test-delete")
+        );
+
+        await assertFails(batch.commit());
+      }
+    );
+
+    await t.test(
+      "Administrator can delete historical paired trips",
+      async () => {
+        const batch = writeBatch(adminDb);
+
+        batch.delete(
+          doc(adminDb, "trips/rules-test-delete")
+        );
+
+        batch.delete(
+          doc(adminDb, "public_trips/rules-test-delete")
+        );
+
+        await assertSucceeds(batch.commit());
+      }
+    );
+
+    // -----------------------------------------
+    // 10. TRIP EVENT HISTORICAL SCOPE
+    // -----------------------------------------
+
+    await t.test(
+      "Dispatcher can query today's events within 50",
+      async () => {
+        const snapshot = await assertSucceeds(
+          getDocs(
+            query(
+              collection(dispatcherDb, "trip_events"),
+              where("timestamp", ">=", Timestamp.fromMillis(manilaDayStartMs())),
+              where("timestamp", "<", Timestamp.fromMillis(manilaDayEndMs())),
+              orderBy("timestamp", "desc"),
+              limit(50)
+            )
+          )
+        );
+
+        assert.ok(snapshot.size >= 0);
+      }
+    );
+
+    await t.test(
+      "Dispatcher cannot query events without a limit",
+      async () => {
+        await assertFails(
+          getDocs(
+            query(
+              collection(dispatcherDb, "trip_events"),
+              where("timestamp", ">=", Timestamp.fromMillis(manilaDayStartMs())),
+              where("timestamp", "<", Timestamp.fromMillis(manilaDayEndMs())),
+              orderBy("timestamp", "desc")
+            )
+          )
+        );
+      }
+    );
+
+    await t.test(
+      "Dispatcher cannot query more than 50 events",
+      async () => {
+        await assertFails(
+          getDocs(
+            query(
+              collection(dispatcherDb, "trip_events"),
+              where("timestamp", ">=", Timestamp.fromMillis(manilaDayStartMs())),
+              where("timestamp", "<", Timestamp.fromMillis(manilaDayEndMs())),
+              orderBy("timestamp", "desc"),
+              limit(51)
+            )
+          )
+        );
+      }
+    );
+
+    await t.test(
+      "Dispatcher cannot query an unrestricted event history",
+      async () => {
+        await assertFails(
+          getDocs(
+            query(
+              collection(dispatcherDb, "trip_events"),
+              orderBy("timestamp", "desc"),
+              limit(50)
+            )
+          )
+        );
+      }
+    );
+
+    await t.test(
+      "Dispatcher cannot query yesterday's events",
+      async () => {
+        await assertFails(
+          getDocs(
+            query(
+              collection(dispatcherDb, "trip_events"),
+              where("timestamp", ">=", Timestamp.fromMillis(manilaDayStartMs(-1))),
+              where("timestamp", "<", Timestamp.fromMillis(manilaDayEndMs(-1))),
+              orderBy("timestamp", "desc"),
+              limit(50)
+            )
+          )
+        );
+      }
+    );
+
+    await t.test(
+      "Dispatcher cannot get a historical event by document ID",
+      async () => {
+        await assertFails(
+          readDocument(
+            dispatcherDb,
+            "trip_events/rules-test-yesterday-event"
+          )
+        );
+      }
+    );
+
+    await t.test(
+      "Dispatcher can get an event exactly at Manila midnight",
+      async () => {
+        await assertSucceeds(
+          readDocument(
+            dispatcherDb,
+            "trip_events/rules-test-boundary-start"
+          )
+        );
+      }
+    );
+
+    await t.test(
+      "Dispatcher cannot get an event one nanosecond before Manila midnight",
+      async () => {
+        await assertFails(
+          readDocument(
+            dispatcherDb,
+            "trip_events/rules-test-boundary-start-minus-1ns"
+          )
+        );
+      }
+    );
+
+    await t.test(
+      "Dispatcher can get an event one nanosecond after Manila midnight",
+      async () => {
+        await assertSucceeds(
+          readDocument(
+            dispatcherDb,
+            "trip_events/rules-test-boundary-start-plus-1ns"
+          )
+        );
+      }
+    );
+
+    await t.test(
+      "Dispatcher cannot get an event exactly at the next Manila midnight",
+      async () => {
+        await assertFails(
+          readDocument(
+            dispatcherDb,
+            "trip_events/rules-test-boundary-next-midnight"
+          )
+        );
+      }
+    );
+
+    await t.test(
+      "Administrator can read historical events by document ID",
+      async () => {
+        await assertSucceeds(
+          readDocument(
+            adminDb,
+            "trip_events/rules-test-yesterday-event"
+          )
+        );
+      }
+    );
+
+    await t.test(
+      "Administrator can query the unrestricted latest 50 events",
+      async () => {
+        await assertSucceeds(
+          getDocs(
+            query(
+              collection(adminDb, "trip_events"),
+              orderBy("timestamp", "desc"),
+              limit(50)
+            )
+          )
+        );
+      }
+    );
+
+    await t.test(
+      "Dispatcher can read today's trip with a trip-specific fare",
+      async () => {
+        const batch = writeBatch(dispatcherDb);
+
+        const updatedAt = serverTimestamp();
+
+        const tripData = createTodayTrip({
+          fare: "99.50",
+          updatedAt,
+          createdAt: updatedAt
+        });
+
+        batch.set(
+          doc(dispatcherDb, "trips/rules-test-fare-specific"),
+          tripData
+        );
+
+        batch.set(
+          doc(dispatcherDb, "public_trips/rules-test-fare-specific"),
+          createPublicTrip(tripData)
+        );
+
+        await assertSucceeds(batch.commit());
+      }
+    );
+
+    await t.test(
+      "Dispatcher can read shared fares",
+      async () => {
+        const snapshot = await assertSucceeds(
+          getDocs(collection(dispatcherDb, "fares"))
+        );
+
+        assert.ok(snapshot.size >= 1);
+      }
+    );
+
+    await t.test(
+      "Departed trips cannot be changed back to Waiting by administrators",
+      async () => {
+        const batch = writeBatch(adminDb);
+
+        const updatedAt = serverTimestamp();
+
+        batch.update(doc(adminDb, "trips/rules-test-today-departed"), {
+          status: "Waiting",
+          updatedAt
+        });
+
+        batch.update(
+          doc(adminDb, "public_trips/rules-test-today-departed"),
+          {
+            status: "Waiting",
+            updatedAt
+          }
+        );
+
+        await assertFails(batch.commit());
       }
     );
 
@@ -875,6 +1667,18 @@ test("VanSked Firestore Security Rules", async (t) => {
               adminDb,
               "trip_events/rules-test-existing-event"
             )
+          )
+        );
+      }
+    );
+
+    await t.test(
+      "Dispatcher can get an event they created today",
+      async () => {
+        await assertSucceeds(
+          readDocument(
+            dispatcherDb,
+            "trip_events/rules-test-created-event"
           )
         );
       }
