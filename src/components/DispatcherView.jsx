@@ -983,7 +983,7 @@ const DispatcherView = ({
   fares,
   isOnline,
 }) => {
-  const { currentUser } = useAuth();
+  const { currentUser, isAdmin } = useAuth();
 
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -1441,7 +1441,21 @@ const DispatcherView = ({
   // SAVE DEFAULT FARE
   // ------------------------------------------------
 
+  // Shared default fares belong to the master fare
+  // table and are admin-managed in Firestore rules.
+  // Dispatchers set the fare per trip when creating
+  // it; that value is stored on the trip and its
+  // public projection, never in the fares
+  // collection.
+
   const handleSaveDefaultFare = async () => {
+    if (!isAdmin) {
+      toast.error(
+        "Only administrators can update default fares."
+      );
+      return;
+    }
+
     if (isSavingFare || !ensureOnline()) return;
 
     const fareText = String(newTrip.fare).trim();
@@ -2005,15 +2019,17 @@ const DispatcherView = ({
                 style={{ flex: 1 }}
               />
 
-              <button
-                type="button"
-                onClick={handleSaveDefaultFare}
-                className="btn btn-secondary"
-                style={{ fontSize: "12px" }}
-                disabled={isSavingFare || !isOnline}
-              >
-                {isSavingFare ? "Saving..." : "Save Default"}
-              </button>
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={handleSaveDefaultFare}
+                  className="btn btn-secondary"
+                  style={{ fontSize: "12px" }}
+                  disabled={isSavingFare || !isOnline}
+                >
+                  {isSavingFare ? "Saving..." : "Save Default"}
+                </button>
+              )}
             </div>
 
             <button

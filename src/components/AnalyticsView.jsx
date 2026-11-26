@@ -12,10 +12,13 @@ import {
   onSnapshot,
   orderBy,
   query,
+  Timestamp,
   where,
 } from "firebase/firestore";
 
 import { db } from "../firebase";
+
+import { useAuth } from "../context/useAuth";
 
 import {
   BarChart,
@@ -119,6 +122,17 @@ const getDestination = (route) => {
 
 const AnalyticsView = () => {
   // ----------------------------------------------
+  // ROLE CONTEXT
+  // ----------------------------------------------
+
+  // Historical analytics is admin-only. Dispatchers
+  // receive Live Ops with no alternate path to the
+  // historical view; the backend trips rules enforce
+  // this independently of the UI.
+
+  const { isAdmin } = useAuth();
+
+  // ----------------------------------------------
   // DATE STATE
   // ----------------------------------------------
 
@@ -132,6 +146,7 @@ const AnalyticsView = () => {
     useState("live");
 
   const showHistorical =
+    isAdmin &&
     analyticsView === "historical";
 
   // The historical dashboard mounts on first selection
@@ -238,15 +253,43 @@ const AnalyticsView = () => {
   }, [todayStr]);
 
   // ----------------------------------------------
-  // LISTEN TO THE LATEST 50 EVENTS
+  // LISTEN TO TODAY'S EVENTS (LATEST 50)
   // ----------------------------------------------
 
-  useEffect(() => {
-    const eventsQuery = query(
-      collection(db, "trip_events"),
-      orderBy("timestamp", "desc"),
-      limit(50)
+  // Firestore rules restrict dispatcher event
+  // reads to the current Manila day and require a
+  // query limit, so the dispatcher query carries
+  // explicit timestamp bounds matching the rule's
+  // server-computed day interval. Administrators
+  // keep the unrestricted latest-50 history feed.
+
+  const eventDayBounds = useMemo(() => {
+    const startMs = Date.parse(
+      `${todayStr}T00:00:00+08:00`
     );
+
+    return {
+      start: Timestamp.fromMillis(startMs),
+      end: Timestamp.fromMillis(
+        startMs + 24 * 60 * 60 * 1000
+      ),
+    };
+  }, [todayStr]);
+
+  useEffect(() => {
+    const eventsQuery = isAdmin
+      ? query(
+          collection(db, "trip_events"),
+          orderBy("timestamp", "desc"),
+          limit(50)
+        )
+      : query(
+          collection(db, "trip_events"),
+          where("timestamp", ">=", eventDayBounds.start),
+          where("timestamp", "<", eventDayBounds.end),
+          orderBy("timestamp", "desc"),
+          limit(50)
+        );
 
     const unsubscribe = onSnapshot(
       eventsQuery,
@@ -275,7 +318,7 @@ const AnalyticsView = () => {
     );
 
     return () => unsubscribe();
-  }, []);
+  }, [eventDayBounds, isAdmin]);
 
   // ----------------------------------------------
   // CALCULATE TRIP METRICS
@@ -351,39 +394,41 @@ const AnalyticsView = () => {
           VIEW SEGMENTED CONTROL
       -------------------------------------- */}
 
-      <div
-        className="analytics-view-switch"
-        role="group"
-        aria-label="Analytics view"
-      >
-        <button
-          type="button"
-          aria-pressed={analyticsView === "live"}
-          className={
-            analyticsView === "live"
-              ? "analytics-switch-button active"
-              : "analytics-switch-button"
-          }
-          onClick={() => setAnalyticsView("live")}
+      {isAdmin && (
+        <div
+          className="analytics-view-switch"
+          role="group"
+          aria-label="Analytics view"
         >
-          Live Ops
-        </button>
-        <button
-          type="button"
-          aria-pressed={showHistorical}
-          className={
-            showHistorical
-              ? "analytics-switch-button active"
-              : "analytics-switch-button"
-          }
-          onClick={() => {
-            setAnalyticsView("historical");
-            setHistoryMounted(true);
-          }}
-        >
-          Historical
-        </button>
-      </div>
+          <button
+            type="button"
+            aria-pressed={analyticsView === "live"}
+            className={
+              analyticsView === "live"
+                ? "analytics-switch-button active"
+                : "analytics-switch-button"
+            }
+            onClick={() => setAnalyticsView("live")}
+          >
+            Live Ops
+          </button>
+          <button
+            type="button"
+            aria-pressed={showHistorical}
+            className={
+              showHistorical
+                ? "analytics-switch-button active"
+                : "analytics-switch-button"
+            }
+            onClick={() => {
+              setAnalyticsView("historical");
+              setHistoryMounted(true);
+            }}
+          >
+            Historical
+          </button>
+        </div>
+      )}
 
       {/* --------------------------------------
           HISTORICAL VIEW — lazily loaded on
