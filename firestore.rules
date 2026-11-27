@@ -44,6 +44,22 @@ service cloud.firestore {
         && staffData().get('role', '') == 'dispatcher';
     }
 
+    // Explicit writer condition for fleet and schedule
+    // template management. Unlike isActiveStaff(), this
+    // predicate names the two permitted roles directly,
+    // so a future staff role added to the isActiveStaff
+    // role list can never silently gain these write
+    // permissions.
+
+    function isTemplatesFleetWriter() {
+      return staffExists()
+        && staffData().get('active', false) == true
+        && (
+          staffData().get('role', '') == 'admin'
+          || staffData().get('role', '') == 'dispatcher'
+        );
+    }
+
     // =========================================
     // ASIA/MANILA DATE HELPERS
     // =========================================
@@ -668,10 +684,10 @@ service cloud.firestore {
 
       allow read: if isActiveStaff();
 
-      allow create, update: if isActiveStaff()
+      allow create, update: if isTemplatesFleetWriter()
         && validFleet(request.resource.data);
 
-      allow delete: if isActiveStaff();
+      allow delete: if isTemplatesFleetWriter();
     }
 
     // =========================================
@@ -739,16 +755,16 @@ service cloud.firestore {
 
     match /schedule_groups/{groupId} {
 
-      // Templates are readable and manageable by all
-      // active staff: dispatchers have full template
-      // access equivalent to administrators.
+      // Templates are readable by active staff and
+      // manageable by active administrators and
+      // dispatchers only.
 
       allow read: if isActiveStaff();
 
-      allow create, update: if isActiveStaff()
+      allow create, update: if isTemplatesFleetWriter()
         && validScheduleGroup(request.resource.data);
 
-      allow delete: if isActiveStaff();
+      allow delete: if isTemplatesFleetWriter();
     }
 
     // =========================================
@@ -792,14 +808,15 @@ service cloud.firestore {
     match /schedule_groups/{groupId}/trips/{tripId} {
 
       // Nested template trips follow the group
-      // permissions: all active staff read and write.
+      // permissions: active staff read; active
+      // administrators and dispatchers write.
 
       allow read: if isActiveStaff();
 
-      allow create, update: if isActiveStaff()
+      allow create, update: if isTemplatesFleetWriter()
         && validTemplateTrip(request.resource.data);
 
-      allow delete: if isActiveStaff();
+      allow delete: if isTemplatesFleetWriter();
     }
 
     // =========================================
