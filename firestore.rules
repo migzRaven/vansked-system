@@ -668,10 +668,10 @@ service cloud.firestore {
 
       allow read: if isActiveStaff();
 
-      allow create, update: if isAdmin()
+      allow create, update: if isActiveStaff()
         && validFleet(request.resource.data);
 
-      allow delete: if isAdmin();
+      allow delete: if isActiveStaff();
     }
 
     // =========================================
@@ -739,16 +739,16 @@ service cloud.firestore {
 
     match /schedule_groups/{groupId} {
 
-      // Templates stay readable by active staff so
-      // dispatchers can generate trips from them,
-      // but template management is admin-only.
+      // Templates are readable and manageable by all
+      // active staff: dispatchers have full template
+      // access equivalent to administrators.
 
       allow read: if isActiveStaff();
 
-      allow create, update: if isAdmin()
+      allow create, update: if isActiveStaff()
         && validScheduleGroup(request.resource.data);
 
-      allow delete: if isAdmin();
+      allow delete: if isActiveStaff();
     }
 
     // =========================================
@@ -792,14 +792,14 @@ service cloud.firestore {
     match /schedule_groups/{groupId}/trips/{tripId} {
 
       // Nested template trips follow the group
-      // permissions: all staff read, admin-only write.
+      // permissions: all active staff read and write.
 
       allow read: if isActiveStaff();
 
-      allow create, update: if isAdmin()
+      allow create, update: if isActiveStaff()
         && validTemplateTrip(request.resource.data);
 
-      allow delete: if isAdmin();
+      allow delete: if isActiveStaff();
     }
 
     // =========================================

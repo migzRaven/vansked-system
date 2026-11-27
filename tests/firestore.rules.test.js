@@ -102,7 +102,9 @@ const TEST_PATHS = [
   `trips/rules-test-future-create`,
 
   "fleet/rules-test-vehicle",
+  "fleet/rules-test-new-vehicle",
   "fares/rules-test-fare",
+  "fares/rules-test-new-fare",
 
   "public_trips/rules-test-future-create",
   `public_trips/rules-test-today-read`,
@@ -911,14 +913,37 @@ test("VanSked Firestore Security Rules", async (t) => {
     );
 
     await t.test(
-      "Dispatcher cannot update fleet records",
+      "Dispatcher can update fleet records",
       async () => {
-        await assertFails(
+        await assertSucceeds(
           updateDoc(
             doc(dispatcherDb, "fleet/rules-test-vehicle"),
             {
-              driver: "Unauthorized Driver"
+              driver: "Dispatcher Updated Driver"
             }
+          )
+        );
+      }
+    );
+
+    await t.test(
+      "Dispatcher can create fleet records",
+      async () => {
+        await assertSucceeds(
+          setDoc(
+            doc(dispatcherDb, "fleet/rules-test-new-vehicle"),
+            fleetFixture
+          )
+        );
+      }
+    );
+
+    await t.test(
+      "Dispatcher can delete fleet records",
+      async () => {
+        await assertSucceeds(
+          deleteDoc(
+            doc(dispatcherDb, "fleet/rules-test-new-vehicle")
           )
         );
       }
@@ -933,6 +958,31 @@ test("VanSked Firestore Security Rules", async (t) => {
             {
               amount: "999"
             }
+          )
+        );
+      }
+    );
+
+    await t.test(
+      "Dispatcher cannot create fare records",
+      async () => {
+        await assertFails(
+          setDoc(
+            doc(dispatcherDb, "fares/rules-test-new-fare"),
+            {
+              amount: "100"
+            }
+          )
+        );
+      }
+    );
+
+    await t.test(
+      "Dispatcher cannot delete fare records",
+      async () => {
+        await assertFails(
+          deleteDoc(
+            doc(dispatcherDb, "fares/rules-test-fare")
           )
         );
       }
@@ -1024,9 +1074,9 @@ test("VanSked Firestore Security Rules", async (t) => {
     );
 
     await t.test(
-      "Dispatcher cannot create nested schedule templates",
+      "Dispatcher can create nested schedule templates",
       async () => {
-        await assertFails(
+        await assertSucceeds(
           setDoc(
             doc(
               dispatcherDb,
@@ -1039,11 +1089,42 @@ test("VanSked Firestore Security Rules", async (t) => {
     );
 
     await t.test(
-      "Dispatcher cannot create schedule groups",
+      "Dispatcher can update nested schedule templates",
       async () => {
-        await assertFails(
+        await assertSucceeds(
+          updateDoc(
+            doc(
+              dispatcherDb,
+              "schedule_groups/rules-test-group/trips/rules-test-template"
+            ),
+            {
+              driver: "Dispatcher Updated Driver"
+            }
+          )
+        );
+      }
+    );
+
+    await t.test(
+      "Dispatcher can delete nested schedule templates",
+      async () => {
+        await assertSucceeds(
+          deleteDoc(
+            doc(
+              dispatcherDb,
+              "schedule_groups/rules-test-group/trips/rules-test-template"
+            )
+          )
+        );
+      }
+    );
+
+    await t.test(
+      "Dispatcher can create schedule groups",
+      async () => {
+        await assertSucceeds(
           setDoc(doc(dispatcherDb, "schedule_groups/rules-test-new-group"), {
-            name: "Unauthorized Group",
+            name: "Dispatcher Group",
             days: {
               Mon: true,
               Tue: true,
@@ -1059,11 +1140,29 @@ test("VanSked Firestore Security Rules", async (t) => {
     );
 
     await t.test(
-      "Dispatcher cannot delete schedule groups",
+      "Dispatcher can update schedule groups",
       async () => {
-        await assertFails(
+        await assertSucceeds(
+          updateDoc(
+            doc(dispatcherDb, "schedule_groups/rules-test-new-group"),
+            {
+              name: "Dispatcher Renamed Group"
+            }
+          )
+        );
+      }
+    );
+
+    // Deletes the dispatcher-created group so the
+    // admin-managed rules-test-group remains intact
+    // for the administrator tests that follow.
+
+    await t.test(
+      "Dispatcher can delete schedule groups",
+      async () => {
+        await assertSucceeds(
           deleteDoc(
-            doc(dispatcherDb, "schedule_groups/rules-test-group")
+            doc(dispatcherDb, "schedule_groups/rules-test-new-group")
           )
         );
       }
