@@ -104,11 +104,14 @@ const OCCUPANCY_BASIS_NOTE =
   "independently verified passenger counts.";
 
 const PASSENGER_DEMAND_BASIS_NOTE =
-  "Passenger counts use the dispatcher-recorded " +
-  "seatsTaken value summed over occupancy-eligible " +
-  "departed trips. They are estimates derived from " +
-  "reported vacancies at departure, not independently " +
-  "verified passenger totals.";
+  "Passenger-volume figures use the dispatcher-" +
+  "recorded seatsTaken value over departed trips with " +
+  "a valid non-negative passenger count, regardless of " +
+  "vehicle capacity. Occupancy figures additionally " +
+  "require valid capacity and the full seat invariant. " +
+  "All values are estimates derived from reported " +
+  "vacancies at departure, not independently verified " +
+  "passenger totals.";
 
 // --------------------------------------------------
 // STATE
@@ -152,6 +155,8 @@ export const createHistoryState = ({ startDate, endDate }) => ({
   dailyOccupancy: {},
 
   passengerDemand: {
+    totalPassengers: 0,
+    eligibleDepartedTrips: 0,
     daily: {},
     weekly: {},
     monthly: {},
@@ -189,16 +194,21 @@ const countBucket = (bucket, key) => {
   bucket[key] = (bucket[key] || 0) + 1;
 };
 
-const addDemand = (bucket, key, seatsTaken, capacity) => {
+const addDemand = (bucket, key, passengerCount, capacity) => {
   const entry = bucket[key] || {
     passengers: 0,
     eligibleTrips: 0,
     capacitySum: 0,
+    capacityKnownTrips: 0,
   };
 
-  entry.passengers += seatsTaken;
+  entry.passengers += passengerCount;
   entry.eligibleTrips += 1;
-  entry.capacitySum += capacity;
+
+  if (capacity !== null) {
+    entry.capacitySum += capacity;
+    entry.capacityKnownTrips += 1;
+  }
 
   bucket[key] = entry;
 };
@@ -368,6 +378,9 @@ export const aggregateHistoryRecord = (
       state.departedCoverage.departuresWithVacantOne += 1;
     }
 
+    // Occupancy eligibility (unchanged): departed, valid
+    // date, valid seats core, and the seat invariant.
+
     if (record.occupancyEligible) {
       state.departedOccupancyEligible += 1;
 
@@ -386,14 +399,24 @@ export const aggregateHistoryRecord = (
       day.capacitySum += record.capacity;
 
       state.dailyOccupancy[date] = day;
+    }
 
-      // Passenger demand intelligence (same eligibility
-      // rules, same record set as occupancy above).
+    // Passenger-volume eligibility (class A): departed,
+    // valid date, and a valid non-negative passenger
+    // count. Deliberately independent of vehicle
+    // capacity and fleet availability; capacity data is
+    // accumulated per bucket only when present.
+
+    if (record.passengerCountValid) {
+      state.passengerDemand.totalPassengers +=
+        record.passengerCount;
+
+      state.passengerDemand.eligibleDepartedTrips += 1;
 
       addDemand(
         state.passengerDemand.daily,
         date,
-        record.seatsTaken,
+        record.passengerCount,
         record.capacity
       );
 
@@ -401,7 +424,7 @@ export const aggregateHistoryRecord = (
         addDemand(
           state.passengerDemand.weekly,
           weekKey,
-          record.seatsTaken,
+          record.passengerCount,
           record.capacity
         );
       }
@@ -409,7 +432,7 @@ export const aggregateHistoryRecord = (
       addDemand(
         state.passengerDemand.monthly,
         date.slice(0, 7),
-        record.seatsTaken,
+        record.passengerCount,
         record.capacity
       );
 
@@ -417,7 +440,7 @@ export const aggregateHistoryRecord = (
         addDemand(
           state.passengerDemand.weekday,
           weekday,
-          record.seatsTaken,
+          record.passengerCount,
           record.capacity
         );
       }
@@ -426,7 +449,7 @@ export const aggregateHistoryRecord = (
         addDemand(
           state.passengerDemand.hourly,
           `${record.manilaTimeFromDeparture.slice(0, 2)}:00`,
-          record.seatsTaken,
+          record.passengerCount,
           record.capacity
         );
       } else {
@@ -434,11 +457,16 @@ export const aggregateHistoryRecord = (
           .hourlyExcludedNoValidDepartureAt += 1;
       }
 
+      // Fleet attribution (class C): valid passenger
+      // counts stay attributable to the recorded vehicle
+      // even when capacity is missing. Occupancy is only
+      // computed when capacity is known.
+
       if (record.hasPlate) {
         addDemand(
           state.passengerDemand.fleet,
           record.plateNormalized,
-          record.seatsTaken,
+          record.passengerCount,
           record.capacity
         );
       }
@@ -534,6 +562,7 @@ export const finalizeHistory = (state) => {
       eligibleTrips: row.eligibleTrips,
       passengers: row.passengers,
       capacitySum: row.capacitySum,
+      capacityKnownTrips: row.capacityKnownTrips,
       occupancyPercent:
         row.capacitySum > 0
           ? (row.passengers / row.capacitySum) * 100
@@ -644,20 +673,33 @@ export const finalizeHistory = (state) => {
       basis: PASSENGER_DEMAND_BASIS_NOTE,
 
       summary: {
-        totalPassengers: occupancy.passengersSum,
-        eligibleDepartedTrips: n,
+        totalPassengers: demand.totalPassengers,
+        eligibleDepartedTrips: demand.eligibleDepartedTrips,
         ineligibleDepartedExcluded:
           demand.ineligibleDepartedExcluded,
-        avgPassengersPerTrip: avgRecordedPassengersPerTrip,
+        occupancyEligibleDepartedTrips: n,
+        avgPassengersPerTrip:
+          demand.eligibleDepartedTrips > 0
+            ? demand.totalPassengers /
+              demand.eligibleDepartedTrips
+            : null,
         weightedOccupancyPercent: weightedLoadFactorPercent,
         busiestTravelDay,
         busiestDepartureHour,
         zeroDenominatorNote:
-          n === 0
-            ? "No occupancy-eligible departed records in " +
-              "range; passenger demand metrics are " +
-              "unavailable rather than zero."
+          demand.eligibleDepartedTrips === 0
+            ? "No departed records with a valid passenger " +
+              "count in range; passenger demand metrics " +
+              "are unavailable rather than zero."
             : null,
+        eligibilityNote:
+          "Passenger totals and averages include every " +
+          "departed record with a valid non-negative " +
+          "seatsTaken value, even when capacity is " +
+          "missing. The weighted occupancy figure still " +
+          "uses occupancy-eligible records with valid " +
+          "capacity and the full seat invariant, so it " +
+          "may cover fewer trips.",
       },
 
       daily: demandRows(demand.daily).map(

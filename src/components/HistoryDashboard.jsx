@@ -1052,7 +1052,7 @@ const HistoryDashboard = () => {
                 value={toPercentText(
                   demand.summary.weightedOccupancyPercent
                 )}
-                note="Σ passengers / Σ capacity over eligible trips"
+                note={`Σ seats / Σ capacity over ${demand.summary.occupancyEligibleDepartedTrips} occupancy-eligible trips (valid capacity required)`}
               />
               <KpiCard
                 label="Busiest travel day"
@@ -1078,6 +1078,9 @@ const HistoryDashboard = () => {
                 {demand.summary.zeroDenominatorNote}
               </p>
             ) : null}
+            <p className="hist-note">
+              {demand.summary.eligibilityNote}
+            </p>
 
             <h4 className="hist-table-title">Daily passengers</h4>
             {demandDailyData.length === 0 ? (
@@ -1227,7 +1230,10 @@ const HistoryDashboard = () => {
 
             <h4 className="hist-table-title">Fleet passenger performance</h4>
             <p className="hist-note">
-              {demand.fleetNote}
+              {demand.fleetNote} Weighted occupancy is
+              shown only where capacity is known for the
+              vehicle's eligible trips; it is otherwise
+              unavailable rather than estimated.
             </p>
             {demand.fleet.length === 0 ? (
               <p className="hist-empty">
@@ -1242,7 +1248,7 @@ const HistoryDashboard = () => {
                       <th>Vehicle (normalized plate)</th>
                       <th>Passengers</th>
                       <th>Eligible trips</th>
-                      <th>Capacity sum</th>
+                      <th>Capacity-known trips</th>
                       <th>Weighted occupancy</th>
                       <th>In current fleet</th>
                     </tr>
@@ -1253,6 +1259,7 @@ const HistoryDashboard = () => {
                         <td>{vehicle.vehicle}</td>
                         <td>{vehicle.passengers}</td>
                         <td>{vehicle.eligibleTrips}</td>
+                        <td>{vehicle.capacityKnownTrips}</td>
                         <td>{vehicle.capacitySum}</td>
                         <td>
                           {toPercentText(

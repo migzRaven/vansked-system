@@ -265,6 +265,22 @@ export const createAuditRecord = (data) => {
     invalidRequired.push("seatsTaken");
   }
 
+  // Passenger-count validity is deliberately weaker
+  // than seatsTakenValid: it accepts a non-negative
+  // integer seatsTaken (bounded by the system's
+  // enforced 100-seat capacity ceiling) even when the
+  // capacity field is missing or invalid. This powers
+  // passenger-volume analytics, which must not depend
+  // on valid vehicle capacity. Occupancy eligibility
+  // continues to use seatsTakenValid and the full
+  // seat invariant.
+
+  const passengerCountValid =
+    present("seatsTaken") &&
+    isInt(seatsTaken) &&
+    seatsTaken >= 0 &&
+    seatsTaken <= 100;
+
   const vacantSeats = Number(data.vacantSeats);
 
   const vacantSeatsValid =
@@ -403,6 +419,8 @@ export const createAuditRecord = (data) => {
 
     capacity: capacityValid ? capacity : null,
     seatsTaken: seatsTakenValid ? seatsTaken : null,
+    passengerCount: passengerCountValid ? seatsTaken : null,
+    passengerCountValid,
     vacantSeats: vacantSeatsValid ? vacantSeats : null,
     seatsCoreValid,
     invariantDelta,

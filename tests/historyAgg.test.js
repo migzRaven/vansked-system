@@ -803,6 +803,7 @@ describe("passenger demand intelligence", () => {
         passengers: 22,
         eligibleTrips: 2,
         capacitySum: 28,
+        capacityKnownTrips: 2,
       },
     ]);
 
@@ -848,12 +849,14 @@ describe("passenger demand intelligence", () => {
         passengers: 12,
         eligibleTrips: 2,
         capacitySum: 28,
+        capacityKnownTrips: 2,
       },
       {
         weekStart: "2026-02-16",
         passengers: 3,
         eligibleTrips: 1,
         capacitySum: 14,
+        capacityKnownTrips: 1,
       },
     ]);
   });
@@ -886,12 +889,14 @@ describe("passenger demand intelligence", () => {
         passengers: 9,
         eligibleTrips: 2,
         capacitySum: 28,
+        capacityKnownTrips: 2,
       },
       {
         month: "2026-03",
         passengers: 9,
         eligibleTrips: 1,
         capacitySum: 14,
+        capacityKnownTrips: 1,
       },
     ]);
   });
@@ -960,12 +965,14 @@ describe("passenger demand intelligence", () => {
         passengers: 4,
         eligibleTrips: 1,
         capacitySum: 14,
+        capacityKnownTrips: 1,
       },
       {
         hour: "14:00",
         passengers: 6,
         eligibleTrips: 1,
         capacitySum: 14,
+        capacityKnownTrips: 1,
       },
     ]);
 
@@ -1007,6 +1014,7 @@ describe("passenger demand intelligence", () => {
         eligibleTrips: 2,
         passengers: 22,
         capacitySum: 28,
+        capacityKnownTrips: 2,
         occupancyPercent: (22 / 28) * 100,
         matchedInCurrentFleet: true,
       },
@@ -1015,6 +1023,7 @@ describe("passenger demand intelligence", () => {
         eligibleTrips: 1,
         passengers: 4,
         capacitySum: 14,
+        capacityKnownTrips: 1,
         occupancyPercent: (4 / 14) * 100,
         matchedInCurrentFleet: false,
       },
@@ -1054,12 +1063,143 @@ describe("passenger demand intelligence", () => {
     assert.equal(summary.zeroDenominatorNote, null);
   });
 
-  it("excludes departed-but-ineligible records transparently", () => {
+  it("separates passenger-volume eligibility from occupancy eligibility", () => {
     const report = run([
       // Invariant violation: seats + vacant != capacity.
+      // Passenger volume INCLUDES the valid seatsTaken
+      // count; occupancy EXCLUDES it.
       baseDepartedTrip({ seatsTaken: 12, vacantSeats: 3 }),
-      // Non-departed status with valid seats.
+      // Non-departed status with valid seats: excluded
+      // from both volume and occupancy.
       ACTIVE_TRIP,
+    ]);
+
+    assert.deepEqual(report.passengerDemand.daily, [
+      {
+        date: "2026-02-11",
+        passengers: 12,
+        eligibleTrips: 1,
+        capacitySum: 14,
+        capacityKnownTrips: 1,
+      },
+    ]);
+    assert.equal(
+      report.passengerDemand.summary.totalPassengers,
+      12
+    );
+    assert.equal(
+      report.passengerDemand.summary
+        .eligibleDepartedTrips,
+      1
+    );
+    assert.equal(
+      report.passengerDemand.summary
+        .ineligibleDepartedExcluded,
+      0
+    );
+    assert.equal(
+      report.passengerDemand.summary
+        .occupancyEligibleDepartedTrips,
+      0
+    );
+    assert.equal(
+      report.occupancy.eligibleRecords,
+      0
+    );
+    assert.equal(
+      report.occupancy.departedTotal,
+      1
+    );
+  });
+
+  it("counts departed trips with missing capacity toward passenger volume but not occupancy", () => {
+    const trip = baseDepartedTrip();
+    delete trip.capacity;
+    delete trip.vacantSeats;
+
+    const report = run([trip], new Set(["ABC123"]));
+
+    assert.deepEqual(report.passengerDemand.daily, [
+      {
+        date: "2026-02-11",
+        passengers: 12,
+        eligibleTrips: 1,
+        capacitySum: 0,
+        capacityKnownTrips: 0,
+      },
+    ]);
+    assert.equal(
+      report.passengerDemand.summary.totalPassengers,
+      12
+    );
+    assert.equal(
+      report.passengerDemand.summary
+        .eligibleDepartedTrips,
+      1
+    );
+    assert.equal(
+      report.passengerDemand.summary
+        .avgPassengersPerTrip,
+      12
+    );
+    assert.equal(
+      report.occupancy.eligibleRecords,
+      0
+    );
+    assert.equal(
+      report.occupancy.seatsSum,
+      0
+    );
+    assert.equal(
+      report.passengerDemand.summary
+        .weightedOccupancyPercent,
+      null
+    );
+    assert.deepEqual(report.passengerDemand.fleet, [
+      {
+        vehicle: "ABC123",
+        eligibleTrips: 1,
+        passengers: 12,
+        capacitySum: 0,
+        capacityKnownTrips: 0,
+        occupancyPercent: null,
+        matchedInCurrentFleet: true,
+      },
+    ]);
+  });
+
+  it("counts departed trips with invalid capacity toward passenger volume but not occupancy", () => {
+    const report = run([
+      baseDepartedTrip({ capacity: "not-a-number" }),
+    ]);
+
+    assert.equal(
+      report.passengerDemand.summary.totalPassengers,
+      12
+    );
+    assert.equal(
+      report.passengerDemand.summary
+        .eligibleDepartedTrips,
+      1
+    );
+    assert.equal(
+      report.occupancy.eligibleRecords,
+      0
+    );
+    assert.equal(
+      report.passengerDemand.daily[0].capacitySum,
+      0
+    );
+    assert.equal(
+      report.passengerDemand.daily[0].capacityKnownTrips,
+      0
+    );
+  });
+
+  it("excludes departed trips with invalid passenger counts from volume and occupancy", () => {
+    const report = run([
+      baseDepartedTrip({ seatsTaken: "many" }),
+      baseDepartedTrip({ seatsTaken: -3, vacantSeats: 17 }),
     ]);
 
     assert.deepEqual(report.passengerDemand.daily, []);
@@ -1070,14 +1210,11 @@ describe("passenger demand intelligence", () => {
     assert.equal(
       report.passengerDemand.summary
         .ineligibleDepartedExcluded,
-      1
+      2
     );
-    // Only the departed invariant-violation record
-    // counts as departed; the Boarding record is not a
-    // departure at all.
     assert.equal(
-      report.occupancy.departedTotal,
-      1
+      report.occupancy.eligibleRecords,
+      0
     );
   });
 
