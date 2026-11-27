@@ -373,6 +373,19 @@ const HistoryDashboard = () => {
       } distinct vehicles matched the current fleet registry.`
     : null;
 
+  const demand = report?.passengerDemand ?? null;
+
+  const demandDailyData = useMemo(
+    () =>
+      demand
+        ? demand.daily.map(({ date, passengers }) => ({
+            date,
+            passengers,
+          }))
+        : [],
+    [demand]
+  );
+
   return (
     <div className="hist-page">
       <header className="hist-header">
@@ -1003,6 +1016,260 @@ const HistoryDashboard = () => {
                     .join(", ")}).`
                 : ""}
             </div>
+          </section>
+
+          {/* 8. PASSENGER DEMAND INTELLIGENCE */}
+
+          <section className="hist-card">
+            <h3>Passenger demand intelligence</h3>
+            <div className="hist-banner" role="status">
+              {demand.basis}
+            </div>
+            <div className="hist-kpis">
+              <KpiCard
+                label="Total passengers"
+                value={demand.summary.totalPassengers}
+                note="Occupancy-eligible departed trips"
+              />
+              <KpiCard
+                label="Eligible departed trips"
+                value={demand.summary.eligibleDepartedTrips}
+                note={`${demand.summary.ineligibleDepartedExcluded} departed excluded (ineligible seat data)`}
+              />
+              <KpiCard
+                label="Average passengers per trip"
+                value={toCountText(
+                  demand.summary.avgPassengersPerTrip === null
+                    ? null
+                    : demand.summary.avgPassengersPerTrip.toFixed(
+                        1
+                      )
+                )}
+                note={`n = ${demand.summary.eligibleDepartedTrips} eligible trips`}
+              />
+              <KpiCard
+                label="Weighted fleet occupancy"
+                value={toPercentText(
+                  demand.summary.weightedOccupancyPercent
+                )}
+                note="Σ passengers / Σ capacity over eligible trips"
+              />
+              <KpiCard
+                label="Busiest travel day"
+                value={
+                  demand.summary.busiestTravelDay
+                    ? `${demand.summary.busiestTravelDay.date} (${demand.summary.busiestTravelDay.passengers})`
+                    : "—"
+                }
+                note="By total passengers"
+              />
+              <KpiCard
+                label="Busiest departure hour"
+                value={
+                  demand.summary.busiestDepartureHour
+                    ? `${demand.summary.busiestDepartureHour.hour} (${demand.summary.busiestDepartureHour.passengers})`
+                    : "—"
+                }
+                note="Scheduled departure, Asia/Manila"
+              />
+            </div>
+            {demand.summary.zeroDenominatorNote ? (
+              <p className="hist-note">
+                {demand.summary.zeroDenominatorNote}
+              </p>
+            ) : null}
+
+            <h4 className="hist-table-title">Daily passengers</h4>
+            {demandDailyData.length === 0 ? (
+              <p className="hist-empty">
+                No passenger demand in the selected range.
+              </p>
+            ) : (
+              <div className="hist-chart">
+                <ResponsiveContainer>
+                  <BarChart data={demandDailyData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fontSize: 11 }}
+                    />
+                    <YAxis allowDecimals={false} />
+                    <Tooltip />
+                    <Bar
+                      dataKey="passengers"
+                      name="Passengers"
+                      fill="var(--navy-700)"
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+
+            <h4 className="hist-table-title">Weekly passengers (Monday-start weeks)</h4>
+            {demand.weekly.length === 0 ? (
+              <p className="hist-empty">
+                No weekly passenger demand.
+              </p>
+            ) : (
+              <div className="hist-table-wrapper">
+                <table className="hist-table">
+                  <thead>
+                    <tr>
+                      <th>Week start</th>
+                      <th>Passengers</th>
+                      <th>Eligible trips</th>
+                      <th>Capacity sum</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {demand.weekly.map((week) => (
+                      <tr key={week.weekStart}>
+                        <td>{week.weekStart}</td>
+                        <td>{week.passengers}</td>
+                        <td>{week.eligibleTrips}</td>
+                        <td>{week.capacitySum}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <h4 className="hist-table-title">Monthly passengers</h4>
+            {demand.monthly.length === 0 ? (
+              <p className="hist-empty">
+                No monthly passenger demand.
+              </p>
+            ) : (
+              <div className="hist-table-wrapper">
+                <table className="hist-table">
+                  <thead>
+                    <tr>
+                      <th>Month</th>
+                      <th>Passengers</th>
+                      <th>Eligible trips</th>
+                      <th>Capacity sum</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {demand.monthly.map((month) => (
+                      <tr key={month.month}>
+                        <td>{month.month}</td>
+                        <td>{month.passengers}</td>
+                        <td>{month.eligibleTrips}</td>
+                        <td>{month.capacitySum}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <h4 className="hist-table-title">Passengers by weekday</h4>
+            <div className="hist-table-wrapper">
+              <table className="hist-table">
+                <thead>
+                  <tr>
+                    <th>Weekday</th>
+                    <th>Passengers</th>
+                    <th>Eligible trips</th>
+                    <th>Capacity sum</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {demand.weekday.map((weekday) => (
+                    <tr key={weekday.weekday}>
+                      <td>{weekday.weekday}</td>
+                      <td>{weekday.passengers}</td>
+                      <td>{weekday.eligibleTrips}</td>
+                      <td>{weekday.capacitySum}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <h4 className="hist-table-title">Passengers by departure hour (Asia/Manila)</h4>
+            <p className="hist-note">
+              {demand.hourlyNote}
+              {demand.hourlyExcludedNoValidDepartureAt > 0
+                ? ` ${demand.hourlyExcludedNoValidDepartureAt} eligible trips lack a valid departureAt timestamp and are excluded from hourly totals.`
+                : ""}
+            </p>
+            {demand.hourly.length === 0 ? (
+              <p className="hist-empty">
+                No hourly passenger demand.
+              </p>
+            ) : (
+              <div className="hist-table-wrapper">
+                <table className="hist-table">
+                  <thead>
+                    <tr>
+                      <th>Hour</th>
+                      <th>Passengers</th>
+                      <th>Eligible trips</th>
+                      <th>Capacity sum</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {demand.hourly.map((hour) => (
+                      <tr key={hour.hour}>
+                        <td>{hour.hour}</td>
+                        <td>{hour.passengers}</td>
+                        <td>{hour.eligibleTrips}</td>
+                        <td>{hour.capacitySum}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <h4 className="hist-table-title">Fleet passenger performance</h4>
+            <p className="hist-note">
+              {demand.fleetNote}
+            </p>
+            {demand.fleet.length === 0 ? (
+              <p className="hist-empty">
+                No fleet passenger performance in the
+                selected range.
+              </p>
+            ) : (
+              <div className="hist-table-wrapper">
+                <table className="hist-table">
+                  <thead>
+                    <tr>
+                      <th>Vehicle (normalized plate)</th>
+                      <th>Passengers</th>
+                      <th>Eligible trips</th>
+                      <th>Capacity sum</th>
+                      <th>Weighted occupancy</th>
+                      <th>In current fleet</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {demand.fleet.map((vehicle) => (
+                      <tr key={vehicle.vehicle}>
+                        <td>{vehicle.vehicle}</td>
+                        <td>{vehicle.passengers}</td>
+                        <td>{vehicle.eligibleTrips}</td>
+                        <td>{vehicle.capacitySum}</td>
+                        <td>
+                          {toPercentText(
+                            vehicle.occupancyPercent
+                          )}
+                        </td>
+                        <td>
+                          {vehicle.matchedInCurrentFleet
+                            ? "Yes"
+                            : "No"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </section>
         </>
       ) : null}

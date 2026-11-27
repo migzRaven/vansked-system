@@ -103,6 +103,13 @@ const OCCUPANCY_BASIS_NOTE =
   "occupancy-eligible departed records. They are not " +
   "independently verified passenger counts.";
 
+const PASSENGER_DEMAND_BASIS_NOTE =
+  "Passenger counts use the dispatcher-recorded " +
+  "seatsTaken value summed over occupancy-eligible " +
+  "departed trips. They are estimates derived from " +
+  "reported vacancies at departure, not independently " +
+  "verified passenger totals.";
+
 // --------------------------------------------------
 // STATE
 // --------------------------------------------------
@@ -144,6 +151,24 @@ export const createHistoryState = ({ startDate, endDate }) => ({
   },
   dailyOccupancy: {},
 
+  passengerDemand: {
+    daily: {},
+    weekly: {},
+    monthly: {},
+    weekday: WEEKDAY_ORDER.reduce((acc, weekday) => {
+      acc[weekday] = {
+        passengers: 0,
+        eligibleTrips: 0,
+        capacitySum: 0,
+      };
+      return acc;
+    }, {}),
+    hourly: {},
+    hourlyExcludedNoValidDepartureAt: 0,
+    ineligibleDepartedExcluded: 0,
+    fleet: {},
+  },
+
   departedCoverage: {
     dateRange: { earliest: null, latest: null },
     possibleLegacyDepartures: 0,
@@ -162,6 +187,20 @@ export const createHistoryState = ({ startDate, endDate }) => ({
 
 const countBucket = (bucket, key) => {
   bucket[key] = (bucket[key] || 0) + 1;
+};
+
+const addDemand = (bucket, key, seatsTaken, capacity) => {
+  const entry = bucket[key] || {
+    passengers: 0,
+    eligibleTrips: 0,
+    capacitySum: 0,
+  };
+
+  entry.passengers += seatsTaken;
+  entry.eligibleTrips += 1;
+  entry.capacitySum += capacity;
+
+  bucket[key] = entry;
 };
 
 const extendRange = (range, date) => {
@@ -347,6 +386,64 @@ export const aggregateHistoryRecord = (
       day.capacitySum += record.capacity;
 
       state.dailyOccupancy[date] = day;
+
+      // Passenger demand intelligence (same eligibility
+      // rules, same record set as occupancy above).
+
+      addDemand(
+        state.passengerDemand.daily,
+        date,
+        record.seatsTaken,
+        record.capacity
+      );
+
+      if (weekKey) {
+        addDemand(
+          state.passengerDemand.weekly,
+          weekKey,
+          record.seatsTaken,
+          record.capacity
+        );
+      }
+
+      addDemand(
+        state.passengerDemand.monthly,
+        date.slice(0, 7),
+        record.seatsTaken,
+        record.capacity
+      );
+
+      if (weekday && WEEKDAY_ORDER.includes(weekday)) {
+        addDemand(
+          state.passengerDemand.weekday,
+          weekday,
+          record.seatsTaken,
+          record.capacity
+        );
+      }
+
+      if (record.manilaTimeFromDeparture) {
+        addDemand(
+          state.passengerDemand.hourly,
+          `${record.manilaTimeFromDeparture.slice(0, 2)}:00`,
+          record.seatsTaken,
+          record.capacity
+        );
+      } else {
+        state.passengerDemand
+          .hourlyExcludedNoValidDepartureAt += 1;
+      }
+
+      if (record.hasPlate) {
+        addDemand(
+          state.passengerDemand.fleet,
+          record.plateNormalized,
+          record.seatsTaken,
+          record.capacity
+        );
+      }
+    } else {
+      state.passengerDemand.ineligibleDepartedExcluded += 1;
     }
   }
 
@@ -402,6 +499,53 @@ export const finalizeHistory = (state) => {
   }));
 
   const coverage = state.departedCoverage;
+
+  // Passenger demand intelligence rows and summaries.
+
+  const demand = state.passengerDemand;
+
+  const demandRows = (record) =>
+    sortedEntries(record).map(([key, value]) => ({
+      key,
+      ...value,
+    }));
+
+  const busiestTravelDay = demandRows(demand.daily).reduce(
+    (busiest, row) =>
+      busiest === null || row.passengers > busiest.passengers
+        ? { date: row.key, passengers: row.passengers }
+        : busiest,
+    null
+  );
+
+  const busiestDepartureHour = demandRows(
+    demand.hourly
+  ).reduce(
+    (busiest, row) =>
+      busiest === null || row.passengers > busiest.passengers
+        ? { hour: row.key, passengers: row.passengers }
+        : busiest,
+    null
+  );
+
+  const fleetDemandRows = demandRows(demand.fleet)
+    .map((row) => ({
+      vehicle: row.key,
+      eligibleTrips: row.eligibleTrips,
+      passengers: row.passengers,
+      capacitySum: row.capacitySum,
+      occupancyPercent:
+        row.capacitySum > 0
+          ? (row.passengers / row.capacitySum) * 100
+          : null,
+      matchedInCurrentFleet:
+        state.vehiclesMatchedInFleet.has(row.key),
+    }))
+    .sort(
+      (a, b) =>
+        b.passengers - a.passengers ||
+        a.vehicle.localeCompare(b.vehicle)
+    );
 
   return {
     scope: {
@@ -494,6 +638,64 @@ export const finalizeHistory = (state) => {
           : null,
 
       daily: dailyOccupancy,
+    },
+
+    passengerDemand: {
+      basis: PASSENGER_DEMAND_BASIS_NOTE,
+
+      summary: {
+        totalPassengers: occupancy.passengersSum,
+        eligibleDepartedTrips: n,
+        ineligibleDepartedExcluded:
+          demand.ineligibleDepartedExcluded,
+        avgPassengersPerTrip: avgRecordedPassengersPerTrip,
+        weightedOccupancyPercent: weightedLoadFactorPercent,
+        busiestTravelDay,
+        busiestDepartureHour,
+        zeroDenominatorNote:
+          n === 0
+            ? "No occupancy-eligible departed records in " +
+              "range; passenger demand metrics are " +
+              "unavailable rather than zero."
+            : null,
+      },
+
+      daily: demandRows(demand.daily).map(
+        ({ key, ...value }) => ({ date: key, ...value })
+      ),
+
+      weekly: demandRows(demand.weekly).map(
+        ({ key, ...value }) => ({
+          weekStart: key,
+          ...value,
+        })
+      ),
+
+      monthly: demandRows(demand.monthly).map(
+        ({ key, ...value }) => ({ month: key, ...value })
+      ),
+
+      weekday: WEEKDAY_ORDER.map((weekday) => ({
+        weekday,
+        ...demand.weekday[weekday],
+      })),
+
+      hourly: demandRows(demand.hourly).map(
+        ({ key, ...value }) => ({ hour: key, ...value })
+      ),
+      hourlyExcludedNoValidDepartureAt:
+        demand.hourlyExcludedNoValidDepartureAt,
+      hourlyNote:
+        "Departure hours reflect the scheduled " +
+        "departureAt time in Asia/Manila, not the " +
+        "physically observed dispatch time.",
+
+      fleet: fleetDemandRows,
+      fleetNote:
+        "Vehicle groupings use trip-recorded plate " +
+        "numbers against the CURRENT fleet registry. " +
+        "Historical vehicle configuration and capacity " +
+        "may differ from current fleet records.",
     },
 
     departedCoverage: {
