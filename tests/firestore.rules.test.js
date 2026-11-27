@@ -44,6 +44,7 @@ const FIRESTORE_PORT = 8080;
 const ADMIN_UID = "rules-test-admin";
 const DISPATCHER_UID = "rules-test-dispatcher";
 const INACTIVE_UID = "rules-test-inactive";
+const UNSUPPORTED_ROLE_UID = "rules-test-unsupported-role";
 
 const TEST_TIMESTAMP = Timestamp.fromDate(
   new Date("2026-11-22T00:00:00Z")
@@ -80,6 +81,7 @@ const TEST_PATHS = [
   `staff/${ADMIN_UID}`,
   `staff/${DISPATCHER_UID}`,
   `staff/${INACTIVE_UID}`,
+  `staff/${UNSUPPORTED_ROLE_UID}`,
 
   "trips/rules-test-private-read",
   "trips/rules-test-dispatcher-update",
@@ -102,7 +104,10 @@ const TEST_PATHS = [
   `trips/rules-test-future-create`,
 
   "fleet/rules-test-vehicle",
+  "fleet/rules-test-new-vehicle",
+  "fleet/rules-test-unsupported-vehicle",
   "fares/rules-test-fare",
+  "fares/rules-test-new-fare",
 
   "public_trips/rules-test-future-create",
   `public_trips/rules-test-today-read`,
@@ -114,8 +119,10 @@ const TEST_PATHS = [
   `public_trips/rules-test-yesterday-read`,
   `schedule_groups/rules-test-group`,
   `schedule_groups/rules-test-new-group`,
+  "schedule_groups/rules-test-unsupported-group",
 
   "schedule_groups/rules-test-group/trips/rules-test-template",
+  "schedule_groups/rules-test-group/trips/rules-test-unsupported-template",
 
   "trips/rules-test-fare-specific",
   "public_trips/rules-test-fare-specific",
@@ -266,6 +273,16 @@ async function setupTestData() {
     await setDoc(doc(db, `staff/${INACTIVE_UID}`), {
       active: false,
       role: "dispatcher"
+    });
+
+    // Active staff account carrying a role that is not
+    // one of the two supported roles. All writes must
+    // fail closed for this account, including fleet and
+    // template management.
+
+    await setDoc(doc(db, `staff/${UNSUPPORTED_ROLE_UID}`), {
+      active: true,
+      role: "manager"
     });
 
     // PRIVATE AND PUBLIC TRIP PAIRS
@@ -527,6 +544,10 @@ test("VanSked Firestore Security Rules", async (t) => {
 
     const inactiveDb = testEnv
       .authenticatedContext(INACTIVE_UID)
+      .firestore();
+
+    const unsupportedRoleDb = testEnv
+      .authenticatedContext(UNSUPPORTED_ROLE_UID)
       .firestore();
 
     const unauthenticatedDb = testEnv
@@ -911,14 +932,37 @@ test("VanSked Firestore Security Rules", async (t) => {
     );
 
     await t.test(
-      "Dispatcher cannot update fleet records",
+      "Dispatcher can update fleet records",
       async () => {
-        await assertFails(
+        await assertSucceeds(
           updateDoc(
             doc(dispatcherDb, "fleet/rules-test-vehicle"),
             {
-              driver: "Unauthorized Driver"
+              driver: "Dispatcher Updated Driver"
             }
+          )
+        );
+      }
+    );
+
+    await t.test(
+      "Dispatcher can create fleet records",
+      async () => {
+        await assertSucceeds(
+          setDoc(
+            doc(dispatcherDb, "fleet/rules-test-new-vehicle"),
+            fleetFixture
+          )
+        );
+      }
+    );
+
+    await t.test(
+      "Dispatcher can delete fleet records",
+      async () => {
+        await assertSucceeds(
+          deleteDoc(
+            doc(dispatcherDb, "fleet/rules-test-new-vehicle")
           )
         );
       }
@@ -938,6 +982,31 @@ test("VanSked Firestore Security Rules", async (t) => {
       }
     );
 
+    await t.test(
+      "Dispatcher cannot create fare records",
+      async () => {
+        await assertFails(
+          setDoc(
+            doc(dispatcherDb, "fares/rules-test-new-fare"),
+            {
+              amount: "100"
+            }
+          )
+        );
+      }
+    );
+
+    await t.test(
+      "Dispatcher cannot delete fare records",
+      async () => {
+        await assertFails(
+          deleteDoc(
+            doc(dispatcherDb, "fares/rules-test-fare")
+          )
+        );
+      }
+    );
+
     // -----------------------------------------
     // 4. INACTIVE STAFF
     // -----------------------------------------
@@ -949,6 +1018,124 @@ test("VanSked Firestore Security Rules", async (t) => {
           readDocument(
             inactiveDb,
             "trips/rules-test-private-read"
+          )
+        );
+      }
+    );
+
+    // -----------------------------------------
+    // 4b. UNSUPPORTED STAFF ROLE
+    // -----------------------------------------
+
+    // Active staff with a role outside the two supported
+    // roles must never gain fleet or template write
+    // access, even if a future role is ever added to the
+    // general active-staff conditions.
+
+    await t.test(
+      "Active staff with an unsupported role cannot update fleet records",
+      async () => {
+        await assertFails(
+          updateDoc(
+            doc(unsupportedRoleDb, "fleet/rules-test-vehicle"),
+            {
+              driver: "Unsupported Role Driver"
+            }
+          )
+        );
+      }
+    );
+
+    await t.test(
+      "Active staff with an unsupported role cannot create fleet records",
+      async () => {
+        await assertFails(
+          setDoc(
+            doc(unsupportedRoleDb, "fleet/rules-test-unsupported-vehicle"),
+            fleetFixture
+          )
+        );
+      }
+    );
+
+    await t.test(
+      "Active staff with an unsupported role cannot delete fleet records",
+      async () => {
+        await assertFails(
+          deleteDoc(
+            doc(unsupportedRoleDb, "fleet/rules-test-vehicle")
+          )
+        );
+      }
+    );
+
+    await t.test(
+      "Active staff with an unsupported role cannot create schedule groups",
+      async () => {
+        await assertFails(
+          setDoc(
+            doc(
+              unsupportedRoleDb,
+              "schedule_groups/rules-test-unsupported-group"
+            ),
+            {
+              name: "Unsupported Role Group",
+              days: {
+                Mon: true,
+                Tue: true,
+                Wed: true,
+                Thu: true,
+                Fri: true,
+                Sat: true,
+                Sun: true
+              }
+            }
+          )
+        );
+      }
+    );
+
+    await t.test(
+      "Active staff with an unsupported role cannot update schedule groups",
+      async () => {
+        await assertFails(
+          updateDoc(
+            doc(
+              unsupportedRoleDb,
+              "schedule_groups/rules-test-group"
+            ),
+            {
+              name: "Unsupported Role Rename"
+            }
+          )
+        );
+      }
+    );
+
+    await t.test(
+      "Active staff with an unsupported role cannot delete schedule groups",
+      async () => {
+        await assertFails(
+          deleteDoc(
+            doc(
+              unsupportedRoleDb,
+              "schedule_groups/rules-test-group"
+            )
+          )
+        );
+      }
+    );
+
+    await t.test(
+      "Active staff with an unsupported role cannot create nested schedule templates",
+      async () => {
+        await assertFails(
+          setDoc(
+            doc(
+              unsupportedRoleDb,
+              "schedule_groups/rules-test-group/trips/rules-test-unsupported-template"
+            ),
+            scheduleTripFixture
           )
         );
       }
@@ -1024,9 +1211,9 @@ test("VanSked Firestore Security Rules", async (t) => {
     );
 
     await t.test(
-      "Dispatcher cannot create nested schedule templates",
+      "Dispatcher can create nested schedule templates",
       async () => {
-        await assertFails(
+        await assertSucceeds(
           setDoc(
             doc(
               dispatcherDb,
@@ -1039,11 +1226,42 @@ test("VanSked Firestore Security Rules", async (t) => {
     );
 
     await t.test(
-      "Dispatcher cannot create schedule groups",
+      "Dispatcher can update nested schedule templates",
       async () => {
-        await assertFails(
+        await assertSucceeds(
+          updateDoc(
+            doc(
+              dispatcherDb,
+              "schedule_groups/rules-test-group/trips/rules-test-template"
+            ),
+            {
+              driver: "Dispatcher Updated Driver"
+            }
+          )
+        );
+      }
+    );
+
+    await t.test(
+      "Dispatcher can delete nested schedule templates",
+      async () => {
+        await assertSucceeds(
+          deleteDoc(
+            doc(
+              dispatcherDb,
+              "schedule_groups/rules-test-group/trips/rules-test-template"
+            )
+          )
+        );
+      }
+    );
+
+    await t.test(
+      "Dispatcher can create schedule groups",
+      async () => {
+        await assertSucceeds(
           setDoc(doc(dispatcherDb, "schedule_groups/rules-test-new-group"), {
-            name: "Unauthorized Group",
+            name: "Dispatcher Group",
             days: {
               Mon: true,
               Tue: true,
@@ -1059,11 +1277,29 @@ test("VanSked Firestore Security Rules", async (t) => {
     );
 
     await t.test(
-      "Dispatcher cannot delete schedule groups",
+      "Dispatcher can update schedule groups",
       async () => {
-        await assertFails(
+        await assertSucceeds(
+          updateDoc(
+            doc(dispatcherDb, "schedule_groups/rules-test-new-group"),
+            {
+              name: "Dispatcher Renamed Group"
+            }
+          )
+        );
+      }
+    );
+
+    // Deletes the dispatcher-created group so the
+    // admin-managed rules-test-group remains intact
+    // for the administrator tests that follow.
+
+    await t.test(
+      "Dispatcher can delete schedule groups",
+      async () => {
+        await assertSucceeds(
           deleteDoc(
-            doc(dispatcherDb, "schedule_groups/rules-test-group")
+            doc(dispatcherDb, "schedule_groups/rules-test-new-group")
           )
         );
       }

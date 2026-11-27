@@ -395,22 +395,22 @@ const Navigation = ({ pathname }) => {
                   Analytics
                 </Link>
 
+                <Link
+                  to="/templates"
+                  className="nav-link"
+                >
+                  Templates
+                </Link>
+
+                <Link
+                  to="/fleet"
+                  className="nav-link"
+                >
+                  Fleet
+                </Link>
+
                 {isAdmin && (
                   <>
-                    <Link
-                      to="/templates"
-                      className="nav-link"
-                    >
-                      Templates
-                    </Link>
-
-                    <Link
-                      to="/fleet"
-                      className="nav-link"
-                    >
-                      Fleet
-                    </Link>
-
                     <Link
                       to="/migration"
                       className="nav-link"
@@ -532,24 +532,24 @@ const Navigation = ({ pathname }) => {
                 Analytics
               </Link>
 
+              <Link
+                to="/templates"
+                className="drawer-link"
+                onClick={closeDrawer}
+              >
+                Templates
+              </Link>
+
+              <Link
+                to="/fleet"
+                className="drawer-link"
+                onClick={closeDrawer}
+              >
+                Fleet Management
+              </Link>
+
               {isAdmin && (
                 <>
-                  <Link
-                    to="/templates"
-                    className="drawer-link"
-                    onClick={closeDrawer}
-                  >
-                    Templates
-                  </Link>
-
-                  <Link
-                    to="/fleet"
-                    className="drawer-link"
-                    onClick={closeDrawer}
-                  >
-                    Fleet Management
-                  </Link>
-
                   <Link
                     to="/migration"
                     className="drawer-link"
@@ -932,7 +932,10 @@ const AppContent = () => {
             path="/templates"
             element={
               <ProtectedRoute
-                allowedRoles={["admin"]}
+                allowedRoles={[
+                  "admin",
+                  "dispatcher",
+                ]}
               >
                 <TemplateManager
                   fleet={fleet}
@@ -946,7 +949,10 @@ const AppContent = () => {
             path="/fleet"
             element={
               <ProtectedRoute
-                allowedRoles={["admin"]}
+                allowedRoles={[
+                  "admin",
+                  "dispatcher",
+                ]}
               >
                 <FleetManager />
               </ProtectedRoute>
