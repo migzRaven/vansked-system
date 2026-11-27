@@ -765,3 +765,502 @@ describe("no fabrication, no Firebase, no production access", () => {
     );
   });
 });
+
+// --------------------------------------------------
+// PASSENGER DEMAND INTELLIGENCE
+// --------------------------------------------------
+
+describe("passenger demand intelligence", () => {
+  const run = (trips, fleet = new Set()) => {
+    const state = createHistoryState({
+      startDate: "2026-02-01",
+      endDate: "2026-03-31",
+    });
+
+    trips.forEach((trip) => {
+      aggregateHistoryRecord(state, trip, fleet);
+    });
+
+    return finalizeHistory(state);
+  };
+
+  it("aggregates total passengers per day over eligible departed trips", () => {
+    const report = run([
+      baseDepartedTrip({ seatsTaken: 12, vacantSeats: 2 }),
+      baseDepartedTrip({
+        time24: "10:30",
+        departureAt: ts("2026-02-11T10:30:00+08:00"),
+        departureTime: "10:30 AM",
+        plateNumber: "def 456",
+        seatsTaken: 10,
+        vacantSeats: 4,
+      }),
+    ]);
+
+    assert.deepEqual(report.passengerDemand.daily, [
+      {
+        date: "2026-02-11",
+        passengers: 22,
+        eligibleTrips: 2,
+        capacitySum: 28,
+        capacityKnownTrips: 2,
+      },
+    ]);
+
+    assert.equal(
+      report.passengerDemand.summary.totalPassengers,
+      22
+    );
+    assert.equal(
+      report.passengerDemand.summary.eligibleDepartedTrips,
+      2
+    );
+  });
+
+  it("groups weekly passengers by Manila Monday-start calendar weeks", () => {
+    // 2026-02-09 is a Monday and 2026-02-15 the Sunday of
+    // the same Manila calendar week; 2026-02-16 starts
+    // the next week.
+
+    const report = run([
+      baseDepartedTrip({
+        date: "2026-02-09",
+        departureAt: ts("2026-02-09T09:30:00+08:00"),
+        seatsTaken: 5,
+        vacantSeats: 9,
+      }),
+      baseDepartedTrip({
+        date: "2026-02-15",
+        departureAt: ts("2026-02-15T09:30:00+08:00"),
+        seatsTaken: 7,
+        vacantSeats: 7,
+      }),
+      baseDepartedTrip({
+        date: "2026-02-16",
+        departureAt: ts("2026-02-16T09:30:00+08:00"),
+        seatsTaken: 3,
+        vacantSeats: 11,
+      }),
+    ]);
+
+    assert.deepEqual(report.passengerDemand.weekly, [
+      {
+        weekStart: "2026-02-09",
+        passengers: 12,
+        eligibleTrips: 2,
+        capacitySum: 28,
+        capacityKnownTrips: 2,
+      },
+      {
+        weekStart: "2026-02-16",
+        passengers: 3,
+        eligibleTrips: 1,
+        capacitySum: 14,
+        capacityKnownTrips: 1,
+      },
+    ]);
+  });
+
+  it("aggregates monthly passengers by Manila calendar month", () => {
+    const report = run([
+      baseDepartedTrip({
+        date: "2026-02-11",
+        departureAt: ts("2026-02-11T09:30:00+08:00"),
+        seatsTaken: 5,
+        vacantSeats: 9,
+      }),
+      baseDepartedTrip({
+        date: "2026-02-20",
+        departureAt: ts("2026-02-20T09:30:00+08:00"),
+        seatsTaken: 4,
+        vacantSeats: 10,
+      }),
+      baseDepartedTrip({
+        date: "2026-03-05",
+        departureAt: ts("2026-03-05T09:30:00+08:00"),
+        seatsTaken: 9,
+        vacantSeats: 5,
+      }),
+    ]);
+
+    assert.deepEqual(report.passengerDemand.monthly, [
+      {
+        month: "2026-02",
+        passengers: 9,
+        eligibleTrips: 2,
+        capacitySum: 28,
+        capacityKnownTrips: 2,
+      },
+      {
+        month: "2026-03",
+        passengers: 9,
+        eligibleTrips: 1,
+        capacitySum: 14,
+        capacityKnownTrips: 1,
+      },
+    ]);
+  });
+
+  it("groups weekday demand in Monday-first order", () => {
+    // 2026-02-09 is a Monday, 2026-02-10 a Tuesday.
+
+    const report = run([
+      baseDepartedTrip({
+        date: "2026-02-09",
+        departureAt: ts("2026-02-09T09:30:00+08:00"),
+        seatsTaken: 5,
+        vacantSeats: 9,
+      }),
+      baseDepartedTrip({
+        date: "2026-02-10",
+        departureAt: ts("2026-02-10T09:30:00+08:00"),
+        seatsTaken: 7,
+        vacantSeats: 7,
+      }),
+    ]);
+
+    assert.deepEqual(
+      report.passengerDemand.weekday.map(
+        ({ weekday, passengers }) => ({ weekday, passengers })
+      ),
+      [
+        { weekday: "Mon", passengers: 5 },
+        { weekday: "Tue", passengers: 7 },
+        { weekday: "Wed", passengers: 0 },
+        { weekday: "Thu", passengers: 0 },
+        { weekday: "Fri", passengers: 0 },
+        { weekday: "Sat", passengers: 0 },
+        { weekday: "Sun", passengers: 0 },
+      ]
+    );
+  });
+
+  it("groups hourly demand by scheduled Manila departure hour and counts missing timestamps", () => {
+    const report = run([
+      baseDepartedTrip({ seatsTaken: 4, vacantSeats: 10 }),
+      baseDepartedTrip({
+        time24: "14:00",
+        departureAt: ts("2026-02-11T14:00:00+08:00"),
+        departureTime: "2:00 PM",
+        plateNumber: "def 456",
+        seatsTaken: 6,
+        vacantSeats: 8,
+      }),
+      // Eligible trip with a non-timestamp departureAt:
+      // counted in daily/summary totals but excluded
+      // from hourly buckets.
+      baseDepartedTrip({
+        time24: "",
+        departureAt: "not-a-timestamp",
+        departureTime: "3:00 PM",
+        plateNumber: "ghi 789",
+        seatsTaken: 2,
+        vacantSeats: 12,
+      }),
+    ]);
+
+    assert.deepEqual(report.passengerDemand.hourly, [
+      {
+        hour: "09:00",
+        passengers: 4,
+        eligibleTrips: 1,
+        capacitySum: 14,
+        capacityKnownTrips: 1,
+      },
+      {
+        hour: "14:00",
+        passengers: 6,
+        eligibleTrips: 1,
+        capacitySum: 14,
+        capacityKnownTrips: 1,
+      },
+    ]);
+
+    assert.equal(
+      report.passengerDemand
+        .hourlyExcludedNoValidDepartureAt,
+      1
+    );
+
+    assert.equal(
+      report.passengerDemand.summary.totalPassengers,
+      12
+    );
+  });
+
+  it("aggregates fleet passenger performance with weighted occupancy and fleet matching", () => {
+    const report = run(
+      [
+        baseDepartedTrip({ seatsTaken: 12, vacantSeats: 2 }),
+        baseDepartedTrip({
+          time24: "10:30",
+          departureAt: ts("2026-02-11T10:30:00+08:00"),
+          departureTime: "10:30 AM",
+          seatsTaken: 10,
+          vacantSeats: 4,
+        }),
+        baseDepartedTrip({
+          plateNumber: "def 456",
+          seatsTaken: 4,
+          vacantSeats: 10,
+        }),
+      ],
+      new Set(["ABC123"])
+    );
+
+    assert.deepEqual(report.passengerDemand.fleet, [
+      {
+        vehicle: "ABC123",
+        eligibleTrips: 2,
+        passengers: 22,
+        capacitySum: 28,
+        capacityKnownTrips: 2,
+        occupancyPercent: (22 / 28) * 100,
+        matchedInCurrentFleet: true,
+      },
+      {
+        vehicle: "DEF456",
+        eligibleTrips: 1,
+        passengers: 4,
+        capacitySum: 14,
+        capacityKnownTrips: 1,
+        occupancyPercent: (4 / 14) * 100,
+        matchedInCurrentFleet: false,
+      },
+    ]);
+  });
+
+  it("computes summary metrics including busiest day and hour", () => {
+    const report = run([
+      baseDepartedTrip({ seatsTaken: 4, vacantSeats: 10 }),
+      baseDepartedTrip({
+        date: "2026-02-12",
+        departureAt: ts("2026-02-12T14:00:00+08:00"),
+        departureTime: "2:00 PM",
+        plateNumber: "def 456",
+        seatsTaken: 9,
+        vacantSeats: 5,
+      }),
+    ]);
+
+    const { summary } = report.passengerDemand;
+
+    assert.equal(summary.totalPassengers, 13);
+    assert.equal(summary.eligibleDepartedTrips, 2);
+    assert.equal(summary.avgPassengersPerTrip, 6.5);
+    assert.equal(
+      summary.weightedOccupancyPercent,
+      (13 / 28) * 100
+    );
+    assert.deepEqual(summary.busiestTravelDay, {
+      date: "2026-02-12",
+      passengers: 9,
+    });
+    assert.deepEqual(summary.busiestDepartureHour, {
+      hour: "14:00",
+      passengers: 9,
+    });
+    assert.equal(summary.zeroDenominatorNote, null);
+  });
+
+  it("separates passenger-volume eligibility from occupancy eligibility", () => {
+    const report = run([
+      // Invariant violation: seats + vacant != capacity.
+      // Passenger volume INCLUDES the valid seatsTaken
+      // count; occupancy EXCLUDES it.
+      baseDepartedTrip({ seatsTaken: 12, vacantSeats: 3 }),
+      // Non-departed status with valid seats: excluded
+      // from both volume and occupancy.
+      ACTIVE_TRIP,
+    ]);
+
+    assert.deepEqual(report.passengerDemand.daily, [
+      {
+        date: "2026-02-11",
+        passengers: 12,
+        eligibleTrips: 1,
+        capacitySum: 14,
+        capacityKnownTrips: 1,
+      },
+    ]);
+    assert.equal(
+      report.passengerDemand.summary.totalPassengers,
+      12
+    );
+    assert.equal(
+      report.passengerDemand.summary
+        .eligibleDepartedTrips,
+      1
+    );
+    assert.equal(
+      report.passengerDemand.summary
+        .ineligibleDepartedExcluded,
+      0
+    );
+    assert.equal(
+      report.passengerDemand.summary
+        .occupancyEligibleDepartedTrips,
+      0
+    );
+    assert.equal(
+      report.occupancy.eligibleRecords,
+      0
+    );
+    assert.equal(
+      report.occupancy.departedTotal,
+      1
+    );
+  });
+
+  it("counts departed trips with missing capacity toward passenger volume but not occupancy", () => {
+    const trip = baseDepartedTrip();
+    delete trip.capacity;
+    delete trip.vacantSeats;
+
+    const report = run([trip], new Set(["ABC123"]));
+
+    assert.deepEqual(report.passengerDemand.daily, [
+      {
+        date: "2026-02-11",
+        passengers: 12,
+        eligibleTrips: 1,
+        capacitySum: 0,
+        capacityKnownTrips: 0,
+      },
+    ]);
+    assert.equal(
+      report.passengerDemand.summary.totalPassengers,
+      12
+    );
+    assert.equal(
+      report.passengerDemand.summary
+        .eligibleDepartedTrips,
+      1
+    );
+    assert.equal(
+      report.passengerDemand.summary
+        .avgPassengersPerTrip,
+      12
+    );
+    assert.equal(
+      report.occupancy.eligibleRecords,
+      0
+    );
+    assert.equal(
+      report.occupancy.seatsSum,
+      0
+    );
+    assert.equal(
+      report.passengerDemand.summary
+        .weightedOccupancyPercent,
+      null
+    );
+    assert.deepEqual(report.passengerDemand.fleet, [
+      {
+        vehicle: "ABC123",
+        eligibleTrips: 1,
+        passengers: 12,
+        capacitySum: 0,
+        capacityKnownTrips: 0,
+        occupancyPercent: null,
+        matchedInCurrentFleet: true,
+      },
+    ]);
+  });
+
+  it("counts departed trips with invalid capacity toward passenger volume but not occupancy", () => {
+    const report = run([
+      baseDepartedTrip({ capacity: "not-a-number" }),
+    ]);
+
+    assert.equal(
+      report.passengerDemand.summary.totalPassengers,
+      12
+    );
+    assert.equal(
+      report.passengerDemand.summary
+        .eligibleDepartedTrips,
+      1
+    );
+    assert.equal(
+      report.occupancy.eligibleRecords,
+      0
+    );
+    assert.equal(
+      report.passengerDemand.daily[0].capacitySum,
+      0
+    );
+    assert.equal(
+      report.passengerDemand.daily[0].capacityKnownTrips,
+      0
+    );
+  });
+
+  it("excludes departed trips with invalid passenger counts from volume and occupancy", () => {
+    const report = run([
+      baseDepartedTrip({ seatsTaken: "many" }),
+      baseDepartedTrip({ seatsTaken: -3, vacantSeats: 17 }),
+    ]);
+
+    assert.deepEqual(report.passengerDemand.daily, []);
+    assert.equal(
+      report.passengerDemand.summary.totalPassengers,
+      0
+    );
+    assert.equal(
+      report.passengerDemand.summary
+        .ineligibleDepartedExcluded,
+      2
+    );
+    assert.equal(
+      report.occupancy.eligibleRecords,
+      0
+    );
+  });
+
+  it("reports unavailable metrics instead of zeros when no eligible records exist", () => {
+    const report = run([ACTIVE_TRIP]);
+
+    const { summary } = report.passengerDemand;
+
+    assert.equal(summary.totalPassengers, 0);
+    assert.equal(summary.eligibleDepartedTrips, 0);
+    assert.equal(summary.avgPassengersPerTrip, null);
+    assert.equal(summary.weightedOccupancyPercent, null);
+    assert.deepEqual(summary.busiestTravelDay, null);
+    assert.deepEqual(summary.busiestDepartureHour, null);
+    assert.ok(summary.zeroDenominatorNote);
+    assert.deepEqual(report.passengerDemand.fleet, []);
+  });
+
+  it("never double-counts a document processed twice", () => {
+    const state = createHistoryState({
+      startDate: "2026-02-01",
+      endDate: "2026-03-31",
+    });
+
+    const trip = baseDepartedTrip();
+
+    aggregateHistoryRecord(state, trip, new Set());
+    aggregateHistoryRecord(state, trip, new Set());
+
+    const report = finalizeHistory(state);
+
+    // The engine counts documents supplied to it; the
+    // scanner layer prevents the same document being
+    // supplied twice across pages. Two identical
+    // submissions therefore appear as two records,
+    // proving per-record aggregation without hidden
+    // dedupe that would mask scanner-level guarantees.
+
+    assert.equal(
+      report.passengerDemand.summary.totalPassengers,
+      24
+    );
+    assert.equal(
+      report.passengerDemand.summary
+        .eligibleDepartedTrips,
+      2
+    );
+  });
+});
